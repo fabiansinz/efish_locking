@@ -1,0 +1,11 @@
+{
+    "display.limit": 7,
+    "loglevel": "DEBUG",
+    "connection.init_function": null,
+    "safemode": true,
+    "display.width": 14,
+    "database.host": "www.epagoge.de",
+    "database.user": "efish",
+    "database.password": "chop$fish",
+    "database.port": 3306
+}
