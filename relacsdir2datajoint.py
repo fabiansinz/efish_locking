@@ -224,27 +224,27 @@ def add_ficurve(fifile, nix_file):
         insert_metadata(sec, fi_meta)
         block = None
 
-# def add_baseline_isi(baselinefile, nix_file):
-#     fi = load(baselinefile)
+def add_baseline_isi(baselinefile, nix_file):
+    fi = load(baselinefile)
 
-#     for i, (fi_meta, fi_key, fi_data) in enumerate(zip(*fi.selectall())):
-#         secname = 'Baseline-ISI-Histogram-%i' % (i, )
-#         block = nix_file.create_block(secname, 'nix.analysis')
-#         fi_data = np.asarray(fi_data).T
-#         for (name, unit), dat in zip(fi_key, fi_data):
-#             if unit == 'HZ': unit = 'Hz' # fix bug in relacs
+    for i, (fi_meta, fi_key, fi_data) in enumerate(zip(*fi.selectall())):
+        secname = 'Baseline-ISI-Histogram-%i' % (i, )
+        block = nix_file.create_block(secname, 'nix.analysis')
+        fi_data = np.asarray(fi_data).T
+        for (name, unit), dat in zip(fi_key, fi_data):
+            if unit == 'HZ': unit = 'Hz' # fix bug in relacs
 
-#             fi_curve_data = block.create_data_array(name, "nix.trace", nix.DataType.Double, dat.shape)
-#             if unit != '1':
-#                 fi_curve_data.unit = unit
-#             fi_curve_data.label = name
-#             fi_curve_data.data[:] = dat.astype(float)
-#             fi_curve_data = None
+            fi_curve_data = block.create_data_array(name, "nix.trace", nix.DataType.Double, dat.shape)
+            if unit != '1':
+                fi_curve_data.unit = unit
+            fi_curve_data.label = name
+            fi_curve_data.data[:] = dat.astype(float)
+            fi_curve_data = None
 
-#         sec = nix_file.create_section(secname, "nix.metadata")
-#         block.metadata = sec
-#         insert_metadata(sec, fi_meta)
-#         block = None
+        sec = nix_file.create_section(secname, "nix.metadata")
+        block.metadata = sec
+        insert_metadata(sec, fi_meta)
+        block = None
 
 
 if __name__=="__main__":

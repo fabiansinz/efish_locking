@@ -184,6 +184,42 @@ class FICurves(dj.Imported):
 
                 self.insert(row)
 
+@server
+class ISIHistograms(dj.Imported):
+    definition = """
+    # ISI Histograms
+
+    block_no            : int           # id of the isi curve block
+    ->Cells                             # cell ids
+
+    ---
+
+    t                   : longblob      # time
+    n                   : longblob      # no of repeats
+    eod                 : longblob      # time in eod cycles
+    p                   : longblob      # histogram
+    """
+
+    @property
+    def populate_relation(self):
+        return Cells().project()
+
+    def _make_tuples(self, key):
+        filename = BASEDIR + key['cell_id'] + '/baseisih1.dat'
+        if os.path.isfile(filename):
+            fi = load(filename)
+
+            for i, (fi_meta, fi_key, fi_data) in enumerate(zip(*fi.selectall())):
+
+                fi_data = np.asarray(fi_data).T
+                row = {'block_no': i, 'cell_id':key['cell_id']}
+                for (name, _), dat in zip(fi_key, fi_data):
+                    row[name.lower()] = dat
+
+                self.insert(row)
+
+
+
 if __name__=="__main__":
     pc = PaperCells()
     pc.make_tuples()
@@ -197,3 +233,7 @@ if __name__=="__main__":
     fi = FICurves()
     fi.populate()
     print(fi)
+
+    isi = ISIHistograms()
+    isi.populate()
+    print(isi)
