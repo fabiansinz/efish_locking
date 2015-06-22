@@ -1,3 +1,4 @@
+import os
 from pprint import pprint
 import re
 import datajoint as dj
@@ -6,6 +7,9 @@ import glob
 import yaml
 BASEDIR = '/home/fabee/data/carolin/'
 server = schema('efish',locals())
+from pyrelacs.DataClasses import load
+import numpy as np
+
 
 def scan_info(cell_id):
     """
@@ -140,6 +144,46 @@ class Cells(dj.Imported):
                }
         self.insert(dat)
 
+@server
+class FICurves(dj.Imported):
+    definition = """
+    # FI  Curves from recorded cells
+
+    block_no            : int           # id of the fi curve block
+    ->Cells                             # cell ids
+
+    ---
+
+    inx                 : longblob      # index
+    n                   : longblob      # no of repeats
+    ir                  : longblob      # Ir in mV
+    im                  : longblob      # Im in mV
+    f_0                 : longblob      # f0 in Hz
+    f_s                 : longblob      # fs in Hz
+    f_r                 : longblob      # fr in Hz
+    ip                  : longblob      # Ip in mV
+    ipm                 : longblob      # Ipm in mV
+    f_p                 : longblob      # fp in Hz
+    """
+
+    @property
+    def populate_relation(self):
+        return Cells().project()
+
+    def _make_tuples(self, key):
+        filename = BASEDIR + key['cell_id'] + '/ficurves1.dat'
+        if os.path.isfile(filename):
+            fi = load(filename)
+
+            for i, (fi_meta, fi_key, fi_data) in enumerate(zip(*fi.selectall())):
+
+                fi_data = np.asarray(fi_data).T
+                row = {'block_no': i, 'cell_id':key['cell_id']}
+                for (name, _), dat in zip(fi_key, fi_data):
+                    row[name.lower()] = dat
+
+                self.insert(row)
+
 if __name__=="__main__":
     pc = PaperCells()
     pc.make_tuples()
@@ -149,4 +193,7 @@ if __name__=="__main__":
 
     cl = Cells()
     cl.populate()
-    print(cl)
+
+    fi = FICurves()
+    fi.populate()
+    print(fi)

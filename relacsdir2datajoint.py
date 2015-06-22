@@ -44,19 +44,19 @@ def get_number_and_unit(value_string):
 
 
 
-# def insert_metadata(root, d):
-#     for k,v in d.iteritems():
-#         if isinstance(v, dict):
-#             sec = root.create_section(k, 'relacs.{0:s}'.format(k))
-#             insert_metadata(sec, v)
-#         else:
-#             value, unit = get_number_and_unit(str(v))
+def insert_metadata(root, d):
+    for k,v in d.iteritems():
+        if isinstance(v, dict):
+            sec = root.create_section(k, 'relacs.{0:s}'.format(k))
+            insert_metadata(sec, v)
+        else:
+            value, unit = get_number_and_unit(str(v))
 
-#             if unit is None:
-#                 root.create_property(k, [nix.Value(str(v))])
-#             else:
-#                 p = root.create_property(k, [nix.Value(value)])
-#                 p.unit = unit
+            if unit is None:
+                root.create_property(k, [nix.Value(str(v))])
+            else:
+                p = root.create_property(k, [nix.Value(value)])
+                p.unit = unit
 
 
 # def add_traces(relacsdir, stimuli, nix_file, block_name ):
@@ -202,27 +202,27 @@ def add_info(relacsdir):
 #         insert_metadata(sec, spi_m)
 
 
-# def add_ficurve(fifile, nix_file):
-#     fi = load(fifile)
+def add_ficurve(fifile, nix_file):
+    fi = load(fifile)
 
-#     for i, (fi_meta, fi_key, fi_data) in enumerate(zip(*fi.selectall())):
-#         secname = 'FI-Curve-%i' % (i, )
-#         block = nix_file.create_block(secname, 'nix.analysis')
-#         fi_data = np.asarray(fi_data).T
-#         for (name, unit), dat in zip(fi_key, fi_data):
-#             if unit == 'HZ': unit = 'Hz' # fix bug in relacs
+    for i, (fi_meta, fi_key, fi_data) in enumerate(zip(*fi.selectall())):
+        secname = 'FI-Curve-%i' % (i, )
+        block = nix_file.create_block(secname, 'nix.analysis')
+        fi_data = np.asarray(fi_data).T
+        for (name, unit), dat in zip(fi_key, fi_data):
+            if unit == 'HZ': unit = 'Hz' # fix bug in relacs
 
-#             fi_curve_data = block.create_data_array(name, "nix.trace", nix.DataType.Double, dat.shape)
-#             if unit != '1':
-#                 fi_curve_data.unit = unit
-#             fi_curve_data.label = name
-#             fi_curve_data.data[:] = dat
-#             fi_curve_data = None
+            fi_curve_data = block.create_data_array(name, "nix.trace", nix.DataType.Double, dat.shape)
+            if unit != '1':
+                fi_curve_data.unit = unit
+            fi_curve_data.label = name
+            fi_curve_data.data[:] = dat
+            fi_curve_data = None
 
-#         sec = nix_file.create_section(secname, "nix.metadata")
-#         block.metadata = sec
-#         insert_metadata(sec, fi_meta)
-#         block = None
+        sec = nix_file.create_section(secname, "nix.metadata")
+        block.metadata = sec
+        insert_metadata(sec, fi_meta)
+        block = None
 
 # def add_baseline_isi(baselinefile, nix_file):
 #     fi = load(baselinefile)
@@ -292,8 +292,8 @@ if __name__=="__main__":
     # nix_spiketimes.append_set_dimension()
 
     # #------------ add fi curves-------------------
-    # for fifile in glob.glob(relacsdir + 'ficurves*.dat'):
-    #     add_ficurve(fifile, nix_file)
+    for fifile in glob.glob(relacsdir + 'ficurves*.dat'):
+        add_ficurve(fifile, nix_file)
 
     # #------------ add baseline isi curves-------------------
     # for isifile in glob.glob(relacsdir + 'baseisih*.dat'):
