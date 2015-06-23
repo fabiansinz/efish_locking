@@ -5,10 +5,14 @@ import datajoint as dj
 from datajoint import schema
 import glob
 import yaml
+
 BASEDIR = '/home/fabee/data/carolin/'
-server = schema('efish',locals())
+server = schema('efish', locals())
 from pyrelacs.DataClasses import load
 import numpy as np
+from pint import UnitRegistry
+
+ureg = UnitRegistry()
 
 
 def scan_info(cell_id):
@@ -19,9 +23,53 @@ def scan_info(cell_id):
     :return: meta information about the recording as a dictionary.
     """
     info = open(BASEDIR + cell_id + '/info.dat').readlines()
-    info = [re.sub(r'[^\x00-\x7F]+',' ', e[1:]) for e in info]
+    info = [re.sub(r'[^\x00-\x7F]+', ' ', e[1:]) for e in info]
     meta = yaml.load(''.join(info))
     return meta
+
+
+def get_number_and_unit(value_string):
+    if value_string.endswith('%'):
+        return (float(value_string.strip()[:-1]), '%')
+    try:
+        a = ureg.parse_expression(value_string)
+    except:
+        return (value_string, None)
+
+    if type(a) == list:
+        return (value_string, None)
+
+    if isinstance(a, (int, float)):
+        return (a, None)
+    else:
+        # a.ito_base_units()
+        value = a.magnitude
+        unit = "{:~}".format(a)
+        unit = unit[unit.index(" "):].replace(" ", "")
+
+        if unit == 'min':
+            unit = 's'
+            value *= 60
+        return (value, unit)
+
+
+def load_traces(relacsdir, stimuli):
+    meta, key, data = stimuli.selectall()
+
+    ret = []
+    for _, name, _, data_type, index in [k for k in key[0] if 'traces' in k]:
+        tmp = {}
+        sample_interval, time_unit = get_number_and_unit(meta[0]['analog input traces']['sample interval%i' % (index,)])
+        sample_unit = meta[0]['analog input traces']['unit%i' % (index,)]
+        x = np.fromfile('%s/trace-%i.raw' % (relacsdir, index), np.float32)
+
+        tmp['unit'] = sample_unit
+        tmp['trace_data'] = name
+        tmp['data'] = x
+        tmp['sample_interval'] = sample_interval
+        tmp['sample_unit'] = sample_unit
+        ret.append(tmp)
+    return {e['trace_data']: e for e in ret}
 
 
 @server
@@ -52,6 +100,7 @@ class EFishes(dj.Manual):
                 self.insert(dat)
             except Exception as e:
                 print(e)
+
 
 @server
 class PaperCells(dj.Lookup):
@@ -110,6 +159,7 @@ class PaperCells(dj.Lookup):
             except Exception as e:
                 print(e)
 
+
 @server
 class Cells(dj.Imported):
     definition = """
@@ -130,7 +180,6 @@ class Cells(dj.Imported):
         return PaperCells()
 
     def _make_tuples(self, key):
-
         a = scan_info(key['cell_id'])
         subj = a['Subject'] if 'Subject' in a else a['Recording']['Subject']
         cl = a['Cell'] if 'Cell' in a else a['Recording']['Cell']
@@ -138,11 +187,12 @@ class Cells(dj.Imported):
                'fish_id': subj['Identifier'],
                'recording_date': a['Recording']['Date'],
                'cell_type': cl['CellType'].lower(),
-               'recording_location': 'nerve'  if cl['Structure'].lower() == 'nerve' else 'ell',
+               'recording_location': 'nerve' if cl['Structure'].lower() == 'nerve' else 'ell',
                'depth': float(cl['Depth'][:-2]),
                'baseline': float(cl['Cell properties']['Firing Rate1'][:-2])
                }
         self.insert(dat)
+
 
 @server
 class FICurves(dj.Imported):
@@ -178,11 +228,12 @@ class FICurves(dj.Imported):
             for i, (fi_meta, fi_key, fi_data) in enumerate(zip(*fi.selectall())):
 
                 fi_data = np.asarray(fi_data).T
-                row = {'block_no': i, 'cell_id':key['cell_id']}
+                row = {'block_no': i, 'cell_id': key['cell_id']}
                 for (name, _), dat in zip(fi_key, fi_data):
                     row[name.lower()] = dat
 
                 self.insert(row)
+
 
 @server
 class ISIHistograms(dj.Imported):
@@ -212,15 +263,216 @@ class ISIHistograms(dj.Imported):
             for i, (fi_meta, fi_key, fi_data) in enumerate(zip(*fi.selectall())):
 
                 fi_data = np.asarray(fi_data).T
-                row = {'block_no': i, 'cell_id':key['cell_id']}
+                row = {'block_no': i, 'cell_id': key['cell_id']}
                 for (name, _), dat in zip(fi_key, fi_data):
                     row[name.lower()] = dat
 
                 self.insert(row)
 
 
+@server
+class Runs(dj.Imported):
+    definition = """
+    # table holding trials
 
-if __name__=="__main__":
+    run_id                     : int # index of the run
+    repro="SAM"                : enum('SAM', 'Filestimulus')
+    ->Cells                          # which cell the trial belongs to
+
+    ---
+
+    delta_f                 : float # delta f of the trial in Hz
+    contrast                : float  # contrast of the trial
+    eod                     : float # eod rate at trial in Hz
+    duration                : float # duration in s
+    am                      : int   # whether AM was used
+    samplingrate            : float # sampling rate in Hz
+    n_harmonics             : int # number of harmonics in the stimulus
+    """
+
+    @property
+    def populate_relation(self):
+        return Cells().project()
+
+    def _make_tuples(self, key):
+        repro = 'SAM'
+        basedir = BASEDIR + key['cell_id']
+        spikefile = basedir + '/samallspikes1.dat'
+        if os.path.isfile(spikefile):
+            stimuli = load(basedir + '/stimuli.dat')
+            traces = load_traces(basedir, stimuli)
+            spikes = load(spikefile)
+            spi_meta, spi_key, spi_data = spikes.selectall()
+
+            globalefield = GlobalEField()
+            localeod = LocalEOD()
+            globaleod = GlobalEOD()
+            spike_table = SpikeTimes()
+            v1trace = VoltageTraces()
+
+            for run_idx, (spi_d, spi_m) in enumerate(zip(spi_data, spi_meta)):
+                print("\t%s run %i" % (repro, run_idx))
+
+                # match index from stimspikes with run from stimuli.dat
+                stim_m, stim_k, stim_d = stimuli.subkey_select(RePro=repro, Run=spi_m['index'])
+
+                if len(stim_m) > 1:
+                    raise KeyError('%s and index are not unique to identify stimuli.dat block.' % (repro,))
+                else:
+                    stim_k = stim_k[0]
+                    stim_m = stim_m[0]
+                    signal_column = \
+                    [i for i, k in enumerate(stim_k) if k[:4] == ('stimulus', 'GlobalEField', 'signal', '-')][0]
+
+                    valid = []
+
+                    if stim_d == [[[0]]]:
+                        print("\t\tEmpty stimuli data! Continuing ...")
+                        continue
+
+                    for d in stim_d[0]:
+                        if not d[signal_column].startswith('FileStimulus-value'):
+                            valid.append(d)
+                        else:
+                            print("\t\tExcluding a reset trial from stimuli.dat")
+                    stim_d = valid
+
+                if len(stim_d) != len(spi_d):
+                    print(
+                        """\t\t%s index %i has %i trials, but stimuli.dat has %i. Trial was probably aborted. Not including data.""" % (
+                        spikefile, spi_m['index'], len(spi_d), len(stim_d)))
+                    continue
+
+                start_index, index = [(i, k[-1]) for i, k in enumerate(stim_k) if 'traces' in k and 'V-1' in k][0]
+                sample_interval, time_unit = get_number_and_unit(
+                    stim_m['analog input traces']['sample interval%i' % (index,)])
+
+                # make sure that everything was sampled with the same interval
+                sis = []
+                for jj in range(1, 5):
+                    si, tu = get_number_and_unit(stim_m['analog input traces']['sample interval%i' % (jj,)])
+                    assert tu == 'ms', 'Time unit is not ms anymore!'
+                    sis.append(si)
+                assert len(np.unique(sis)) == 1, 'Different sampling intervals!'
+
+                duration = ureg.parse_expression(spi_m['Settings']['Stimulus']['duration']).to(time_unit).magnitude
+
+                if 'ampl' in spi_m['Settings']['Stimulus']:
+                    nharmonics = int(spi_m['Settings']['Stimulus']['ampl'])
+                else:
+                    nharmonics = 0
+
+                start_idx, stop_idx = [], []
+                # start_times, stop_times = [], []
+
+                start_indices = [d[start_index] for d in stim_d]
+                for begin_index, trial in zip(start_indices, spi_d):
+                    # start_times.append(begin_index*sample_interval)
+                    # stop_times.append(begin_index*sample_interval + duration)
+                    start_idx.append(begin_index)
+                    stop_idx.append(begin_index + duration / sample_interval)
+
+                to_insert = dict(key)
+                to_insert['run_id'] = spi_m['index']
+                to_insert['delta_f'] = float(spi_m['Settings']['Stimulus']['deltaf'][:-2])
+                to_insert['contrast'] = float(spi_m['Settings']['Stimulus']['contrast'][:-1])
+                to_insert['eod'] = float(spi_m['EOD rate'][:-2])
+                to_insert['duration'] = duration / 1000 if time_unit == 'ms' else duration
+                to_insert['am'] = spi_m['Settings']['Stimulus']['am'] * 1
+                to_insert['samplingrate'] = 1 / sample_interval * 1000 if time_unit == 'ms' else 1 / sample_interval
+                to_insert['n_harmonics'] = nharmonics
+                to_insert['repro'] = 'SAM'
+                self.insert(to_insert)
+
+                for trial_idx, (start, stop) in enumerate(zip(start_idx, stop_idx)):
+                    tmp = dict(run_id=run_idx, trial_id=trial_idx, repro='SAM', **key)
+                    tmp['trace'] = traces['V-1']['data'][start:stop]
+                    v1trace.insert(tmp)
+
+                    tmp['trace'] = traces['GlobalEFie']['data'][start:stop]
+                    globalefield.insert(tmp)
+
+                    tmp['trace'] = traces['LocalEOD-1']['data'][start:stop]
+                    localeod.insert(tmp)
+
+                    tmp['trace'] = traces['EOD']['data'][start:stop]
+                    globaleod.insert(tmp)
+
+                    tmp.pop('trace')
+                    tmp['times'] = spi_d[trial_idx]
+                    spike_table.insert(tmp)
+
+
+@server
+class SpikeTimes(dj.Subordinate, dj.Manual):
+    definition = """
+    # table holding spike time of trials
+
+    -> Runs
+    trial_id                   : int # index of the trial within run
+
+    ---
+
+    times                      : longblob # spikes times
+    """
+
+
+@server
+class GlobalEField(dj.Subordinate, dj.Manual):
+    definition = """
+    # table holding global efield trace
+
+    -> Runs
+    trial_id                   : int # index of the trial within run
+
+    ---
+
+    trace                      : longblob # spikes times
+    """
+
+
+@server
+class LocalEOD(dj.Subordinate, dj.Manual):
+    definition = """
+    # table holding local EOD traces
+
+    -> Runs
+    trial_id                   : int # index of the trial within run
+
+    ---
+
+    trace                      : longblob # spikes times
+    """
+
+
+@server
+class GlobalEOD(dj.Subordinate, dj.Manual):
+    definition = """
+    # table holding global EOD traces
+
+    -> Runs
+    trial_id                   : int # index of the trial within run
+
+    ---
+
+    trace                      : longblob # spikes times
+    """
+
+
+@server
+class VoltageTraces(dj.Subordinate, dj.Manual):
+    definition = """
+    # table holding voltage traces
+
+    -> Runs
+    trial_id                   : int # index of the trial within run
+    ---
+
+    trace                      : longblob # spikes times
+    """
+
+
+if __name__ == "__main__":
     pc = PaperCells()
     pc.make_tuples()
 
@@ -237,3 +489,6 @@ if __name__=="__main__":
     isi = ISIHistograms()
     isi.populate()
     print(isi)
+
+    sams = Runs()
+    sams.populate(restriction=cl)
