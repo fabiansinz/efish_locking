@@ -4,6 +4,7 @@ import re
 import datajoint as dj
 from datajoint import schema
 import glob
+import sys
 import yaml
 
 BASEDIR = '/home/fabee/data/carolin/'
@@ -13,6 +14,61 @@ import numpy as np
 from pint import UnitRegistry
 
 ureg = UnitRegistry()
+
+def peakdet(v, delta=None):
+    maxtab = []
+    maxidx = []
+
+    mintab = []
+    minidx = []
+    v = np.asarray(v)
+    if delta is None:
+        up = int(np.min([1e5,len(v)]))
+        tmp = np.abs(v[:up])
+        delta = np.percentile(tmp, 99.9) - np.percentile(tmp, 50)
+
+    if not np.isscalar(delta):
+        sys.exit('Input argument delta must be a scalar')
+
+
+    if delta <= 0:
+        sys.exit('Input argument delta must be positive')
+
+    mn, mx = np.Inf, -np.Inf
+    mnpos, mxpos = np.NaN, np.NaN
+
+    lookformax = True
+    n = len(v)
+    for i in range(len(v)):
+        if i % 1e3 == 0:
+            sys.stdout.write("\r\t\t%.2f%%" % (float(i)/float(n)*100.,))
+            # sys.stdout.write("\r%i/%i" % (i, n))
+        this = v[i]
+        if this > mx:
+            mx = this
+            mxpos = i
+
+        if this < mn:
+            mn = this
+            mnpos = i
+
+        if lookformax:
+            if this < mx - delta:
+                maxtab.append(mx)
+                maxidx.append(mxpos)
+                mn = this
+                mnpos = i
+                lookformax = False
+
+        else:
+            if this > mn + delta:
+                mintab.append(mn)
+                minidx.append(mnpos)
+                mx = this
+                mxpos = i
+                lookformax = True
+
+    return np.asarray(maxtab), np.asarray(maxidx, dtype=int), np.asarray(mintab), np.asarray(minidx, dtype=int)
 
 
 def scan_info(cell_id):
@@ -358,7 +414,7 @@ class Runs(dj.Imported):
                 duration = ureg.parse_expression(spi_m['Settings']['Stimulus']['duration']).to(time_unit).magnitude
 
                 if 'ampl' in spi_m['Settings']['Stimulus']:
-                    nharmonics = int(spi_m['Settings']['Stimulus']['ampl'])
+                    nharmonics = len(list(map(float, spi_m['Settings']['Stimulus']['ampl'].strip().split(','))))
                 else:
                     nharmonics = 0
 
@@ -382,26 +438,25 @@ class Runs(dj.Imported):
                 to_insert['samplingrate'] = 1 / sample_interval * 1000 if time_unit == 'ms' else 1 / sample_interval
                 to_insert['n_harmonics'] = nharmonics
                 to_insert['repro'] = 'SAM'
-                self.insert(to_insert)
 
+                self.insert(to_insert)
                 for trial_idx, (start, stop) in enumerate(zip(start_idx, stop_idx)):
                     tmp = dict(run_id=run_idx, trial_id=trial_idx, repro='SAM', **key)
                     tmp['trace'] = traces['V-1']['data'][start:stop]
-                    v1trace.insert(tmp)
+                    v1trace.insert(tmp, replace=True)
 
                     tmp['trace'] = traces['GlobalEFie']['data'][start:stop]
-                    globalefield.insert(tmp)
+                    globalefield.insert(tmp, replace=True)
 
                     tmp['trace'] = traces['LocalEOD-1']['data'][start:stop]
-                    localeod.insert(tmp)
+                    localeod.insert(tmp, replace=True)
 
                     tmp['trace'] = traces['EOD']['data'][start:stop]
-                    globaleod.insert(tmp)
+                    globaleod.insert(tmp, replace=True)
 
                     tmp.pop('trace')
                     tmp['times'] = spi_d[trial_idx]
-                    spike_table.insert(tmp)
-
+                    spike_table.insert(tmp, replace=True)
 
 @server
 class SpikeTimes(dj.Subordinate, dj.Manual):
@@ -471,24 +526,52 @@ class VoltageTraces(dj.Subordinate, dj.Manual):
     trace                      : longblob # spikes times
     """
 
+@server
+class GlobalEFieldPeaksTroughs(dj.Computed):
+    definition = """
+    # table for peaks and troughs in the global efield
+
+    -> GlobalEField
+
+    ---
+
+    peaks               : longblob # peak indices
+    troughs             : longblob # trough indices
+    """
+
+    @property
+    def populate_relation(self):
+        return GlobalEField()
+
+    def _make_tuples(self, key):
+
+        dat = (GlobalEField() & key).fetch(as_dict=True)
+        assert len(dat) == 1, 'key returned more than one element'
+
+        _, key['peaks'], _, key['troughs'] = peakdet(dat[0]['trace'])
+        self.insert(key)
+
 
 if __name__ == "__main__":
-    pc = PaperCells()
-    pc.make_tuples()
+    # pc = PaperCells()
+    # pc.make_tuples()
+    #
+    # ef = EFishes()
+    # ef.make_tuples()
+    #
+    # cl = Cells()
+    # cl.populate()
+    #
+    # fi = FICurves()
+    # fi.populate()
+    # print(fi)
+    #
+    # isi = ISIHistograms()
+    # isi.populate()
+    # print(isi)
+    #
+    # sams = Runs()
+    # sams.populate(restriction=cl)
 
-    ef = EFishes()
-    ef.make_tuples()
-
-    cl = Cells()
-    cl.populate()
-
-    fi = FICurves()
-    fi.populate()
-    print(fi)
-
-    isi = ISIHistograms()
-    isi.populate()
-    print(isi)
-
-    sams = Runs()
-    sams.populate(restriction=cl)
+    pts = GlobalEFieldPeaksTroughs()
+    pts.populate()
