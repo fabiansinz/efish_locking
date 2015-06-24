@@ -16,6 +16,7 @@ from pint import UnitRegistry
 ureg = UnitRegistry()
 
 def peakdet(v, delta=None):
+    sys.stdout.write('.')
     maxtab = []
     maxidx = []
 
@@ -40,8 +41,8 @@ def peakdet(v, delta=None):
     lookformax = True
     n = len(v)
     for i in range(len(v)):
-        if i % 1e3 == 0:
-            sys.stdout.write("\r\t\t%.2f%%" % (float(i)/float(n)*100.,))
+        # if i % 1e3 == 0:
+            # sys.stdout.write("\r\t\t%.2f%%" % (float(i)/float(n)*100.,))
             # sys.stdout.write("\r%i/%i" % (i, n))
         this = v[i]
         if this > mx:
@@ -468,7 +469,7 @@ class SpikeTimes(dj.Subordinate, dj.Manual):
 
     ---
 
-    times                      : longblob # spikes times
+    times                      : longblob # spikes times in ms
     """
 
 
@@ -551,6 +552,31 @@ class GlobalEFieldPeaksTroughs(dj.Computed):
         _, key['peaks'], _, key['troughs'] = peakdet(dat[0]['trace'])
         self.insert(key)
 
+@server
+class LocalEODPeaksTroughs(dj.Computed):
+    definition = """
+    # table for peaks and troughs in local EOD
+
+    -> LocalEOD
+
+    ---
+
+    peaks               : longblob # peak indices
+    troughs             : longblob # trough indices
+    """
+
+    @property
+    def populate_relation(self):
+        return LocalEOD()
+
+    def _make_tuples(self, key):
+
+        dat = (LocalEOD() & key).fetch(as_dict=True)
+        assert len(dat) == 1, 'key returned more than one element'
+
+        _, key['peaks'], _, key['troughs'] = peakdet(dat[0]['trace'])
+        self.insert(key)
+
 
 if __name__ == "__main__":
     # pc = PaperCells()
@@ -575,3 +601,6 @@ if __name__ == "__main__":
 
     pts = GlobalEFieldPeaksTroughs()
     pts.populate()
+
+    lpts = LocalEODPeaksTroughs()
+    lpts.populate()
