@@ -10,6 +10,7 @@ import pycircstat as circ
 
 server = schema('efish', locals())
 
+
 def compute_1st_order_spectrum(aggregated_spikes, sampling_rate, alpha=0.001):
     """
     Computes the 1st order amplitue spectrum of the spike train (i.e. the vector strength spectrum
@@ -28,6 +29,7 @@ def compute_1st_order_spectrum(aggregated_spikes, sampling_rate, alpha=0.001):
     p = 1 - alpha
     threshold = np.sqrt(- np.log(1 - p) / len(aggregated_spikes))
     return w_all, vsa_all, threshold
+
 
 def compute_2nd_order_spectrum(spikes, t, sampling_rate, alpha=0.001, method='poisson'):
     """
@@ -75,8 +77,9 @@ def compute_2nd_order_spectrum(spikes, t, sampling_rate, alpha=0.001, method='po
 
     return freqs, m_ampl, y
 
+
 def find_best_locking(spikes, fundamentals, tol=1, step=0.001):
-    df = np.atleast_2d(np.arange(-tol, tol+step, step))
+    df = np.atleast_2d(np.arange(-tol, tol + step, step))
     max_w = []
     max_v = []
     if type(spikes) is not list:
@@ -86,66 +89,68 @@ def find_best_locking(spikes, fundamentals, tol=1, step=0.001):
         f = freq + df
         vector_strengths = []
         for trial in spikes:
-            vector_strengths.append( 1 - circ.var( (trial[:,None] % (1./f))*f * 2*np.pi , axis=0) )
+            vector_strengths.append(1 - circ.var((trial[:, None] % (1. / f)) * f * 2 * np.pi, axis=0))
         mean_vector_strength = np.mean(vector_strengths, axis=0)
         max_idx = np.argmax(mean_vector_strength)
-        max_w.append( f[0, max_idx] )
-        max_v.append( mean_vector_strength[max_idx])
+        max_w.append(f[0, max_idx])
+        max_v.append(mean_vector_strength[max_idx])
 
     return np.array(max_w), np.array(max_v)
 
-def find_significant_peaks(spikes, w, spectrum, peak_dict, threshold, tol=1., upper_cutoff=2000):
 
+def find_significant_peaks(spikes, w, spectrum, peak_dict, threshold, tol=1., upper_cutoff=2000):
     frequencies = defaultdict(list)
     amplitudes = defaultdict(list)
 
     # find peaks in spectrum that are greater or equal than the threshold
-    max_vs, max_idx, _, _ = peakdet(spectrum, delta=threshold * .9)
+    max_vs, max_idx, _, _ = peakdet(spectrum, delta=threshold * .9 )
     max_vs, max_idx = max_vs[threshold <= max_vs], max_idx[threshold <= max_vs]
     max_w = w[max_idx]
 
     # get rid of everythings that is above the frequency cutoff
     idx = np.abs(max_w) < upper_cutoff
+    if idx.sum() == 0: # no sigificant peak was found
+        return []
     max_w = max_w[idx]
     max_vs = max_vs[idx]
 
-    # refine the found maxima
-    max_w, max_vs = find_best_locking(spikes, max_w, tol=tol)
 
-    candidate_dict = {}
+
+    # refine the found maxima
+    max_w_ref, max_vs_ref = find_best_locking(spikes, max_w, tol=tol)
+
     for name, freq in peak_dict.items():
         idx = np.argmin(np.abs(max_w - freq))
         if np.abs(max_w[idx] - freq) < tol:
             print("\t\tAdjusting %s: %.2f --> %.2f" % (name, freq, max_w[idx]))
-            candidate_dict[name] = max_w[idx]
+            peak_dict[name] = max_w[idx]
 
-    coeffs = [(name,candidate_dict[name], np.arange(-5,6)) if name in candidate_dict
-                                    else (name,peak_dict[name], np.array([0]))
-                                            for name in peak_dict]
+    coeffs = [(name, peak_dict[name], np.arange(-5, 6)) for name in peak_dict]
     coeff_names, coeff_f, coeff_facs = zip(*coeffs)
 
-
-
-    # if 'stimulus' in candidate_dict and 'eod' in candidate_dict:
-    #     st = candidate_dict['stimulus']
-    #     eod = candidate_dict['eod']
-    for maw, ma in zip(max_w, max_vs):
+    ret = []
+    for maw, ma, maw_r, ma_r in zip(max_w, max_vs, max_w_ref, max_vs_ref):
         # if maw < 0: continue
         for facs in itertools.product(*coeff_facs):
-            if np.abs(np.dot(facs, coeff_f)) > upper_cutoff:
-                print(facs, np.abs(np.dot(facs, coeff_f)))
+            cur_freq = np.dot(facs, coeff_f)
+            if np.abs(cur_freq) > upper_cutoff:
                 continue
-            from IPython import embed # TODO: remove this
-            embed()
-            exit()
 
-            # if np.abs(np.abs(maw) - np.abs(i*st - j*eod)) < tol:
-            #     term = sympy.latex(abs(i*f_s - j*f_e).simplify())
-            #     if (np.round(np.abs(maw),2), np.round(ma,2)) not in texts:
-            #         term = term.replace("1.0 ", "").replace(".0","").replace("\\lvert","|").replace("\\rvert","|")
-            #         texts[(np.round(np.abs(maw),2), np.round(ma,2))] = '$%s \\approx %.1f$Hz' % (term, np.abs(maw))
-            #     break
-    return frequencies, amplitudes
+            if np.abs(maw - cur_freq) < tol:
+                tmp = dict(zip(coeff_names, facs))
+                tmp['frequency'] = maw
+                tmp['vector_strength'] = ma
+                tmp['tolerance'] = tol
+                tmp['refined'] = 0
+                ret.append(tmp)
+
+                tmp = dict(zip(coeff_names, facs))
+                tmp['frequency'] = maw_r
+                tmp['vector_strength'] = ma_r
+                tmp['tolerance'] = tol
+                tmp['refined'] = 1
+                ret.append(tmp)
+    return ret
 
 
 @server
@@ -164,21 +169,22 @@ class FirstOrderSpikeSpectra(dj.Computed):
 
     @property
     def populate_relation(self):
-        return Runs()&GlobalEFieldPeaksTroughs()
+        return Runs() & GlobalEFieldPeaksTroughs()
 
     def _make_tuples(self, key):
         print('Processing', key['cell_id'], 'run', key['run_id'], )
         dat = (Runs() & key).fetch(as_dict=True)[0]
-        dt = 1/dat['samplingrate']
+        dt = 1 / dat['samplingrate']
 
         pt = (GlobalEFieldPeaksTroughs() & key).fetch(as_dict=True)
         st = (SpikeTimes() & key).fetch(as_dict=True)
 
-        aggregated_spikes = np.hstack([s['times']/1000-p['peaks'][0]*dt for s,p in zip(st, pt)])
+        aggregated_spikes = np.hstack([s['times'] / 1000 - p['peaks'][0] * dt for s, p in zip(st, pt)])
 
         key['frequencies'], key['vector_strengths'], key['critical_value'] = \
-            compute_1st_order_spectrum(aggregated_spikes, 1/dt, alpha=0.001)
+            compute_1st_order_spectrum(aggregated_spikes, 1 / dt, alpha=0.001)
         self.insert(key)
+
 
 @server
 class SecondOrderSpikeSpectra(dj.Computed):
@@ -200,15 +206,15 @@ class SecondOrderSpikeSpectra(dj.Computed):
     def _make_tuples(self, key):
         print('Processing', key['cell_id'], 'run', key['run_id'], )
         dat = (Runs() & key).fetch(as_dict=True)[0]
-        dt = 1/dat['samplingrate']
+        dt = 1 / dat['samplingrate']
         t = np.arange(0, dat['duration'], dt)
         st = (SpikeTimes() & key).fetch(as_dict=True)
-        st = [s['times']/1000 for s in st] # convert to s
-
+        st = [s['times'] / 1000 for s in st]  # convert to s
 
         key['frequencies'], key['vector_strengths'], key['critical_value'] = \
-            compute_2nd_order_spectrum(st, t, 1/dt, alpha=0.001, method='poisson')
+            compute_2nd_order_spectrum(st, t, 1 / dt, alpha=0.001, method='poisson')
         self.insert(key)
+
 
 @server
 class FirstOrderSignificantPeaks(dj.Computed):
@@ -217,8 +223,8 @@ class FirstOrderSignificantPeaks(dj.Computed):
 
     stimulus_coeff          : int   # how many multiples of the stimulus
     eod_coeff               : int   # how many multiples of the eod
-    delta_f_coeff           : int   # how many multiples of delta f
     baseline_coeff          : int   # how many multiples of the baseline firing rate
+    refined                 : int   # whether the search was refined or not
     ->FirstOrderSpikeSpectra
 
     ---
@@ -237,20 +243,24 @@ class FirstOrderSignificantPeaks(dj.Computed):
         run = (Runs() & key).fetch1()
         cell = (Cells() & key).fetch1()
 
-        dt = 1/run['samplingrate']
+        dt = 1 / run['samplingrate']
 
         pt = (GlobalEFieldPeaksTroughs() & key).fetch(as_dict=True)
         st = (SpikeTimes() & key).fetch(as_dict=True)
-        spikes = np.hstack([s['times']/1000-p['peaks'][0]*dt for s,p in zip(st, pt)])
+        spikes = np.hstack([s['times'] / 1000 - p['peaks'][0] * dt for s, p in zip(st, pt)])
 
         interesting_frequencies = {'stimulus_coeff': run['eod'] + run['delta_f'], 'eod_coeff': run['eod'],
-                                   'delta_f_coeff': np.abs(run['delta_f']), 'baseline_coeff': cell['baseline']}
+                                   'baseline_coeff': cell['baseline']}
 
-        frequencies, amplitudes, texts = find_significant_peaks(spikes, data['frequencies'], data['vector_strengths'],
-                                                                interesting_frequencies, data['critical_value'])
+        sas = find_significant_peaks(spikes, data['frequencies'], data['vector_strengths'],
+                                            interesting_frequencies, data['critical_value'])
+        for s in sas:
+            s.update(key)
+            self.insert(s)
 
 
-if __name__=="__main__":
+
+if __name__ == "__main__":
     foss = FirstOrderSpikeSpectra()
     foss.populate()
 
