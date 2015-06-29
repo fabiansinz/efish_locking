@@ -21,7 +21,7 @@ def get_number_and_unit(value_string):
     try:
         a = ureg.parse_expression(value_string)
     except:
-        return (value_string, None)
+        return (va  lue_string, None)
 
 
     if type(a) == list:

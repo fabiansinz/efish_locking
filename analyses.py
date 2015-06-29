@@ -1,5 +1,6 @@
 from collections import defaultdict
 import itertools
+import pymysql
 from scipy import stats
 import datajoint as dj
 from datajoint import schema
@@ -99,9 +100,10 @@ def find_best_locking(spikes, fundamentals, tol=1, step=0.001):
 
 
 def find_significant_peaks(spikes, w, spectrum, peak_dict, threshold, tol=1., upper_cutoff=2000):
-    frequencies = defaultdict(list)
-    amplitudes = defaultdict(list)
 
+    if not threshold > 0:
+        print("Threshold value %.4f is not allowed" % threshold)
+        return []
     # find peaks in spectrum that are greater or equal than the threshold
     max_vs, max_idx, _, _ = peakdet(spectrum, delta=threshold * .9 )
     max_vs, max_idx = max_vs[threshold <= max_vs], max_idx[threshold <= max_vs]
@@ -110,6 +112,7 @@ def find_significant_peaks(spikes, w, spectrum, peak_dict, threshold, tol=1., up
     # get rid of everythings that is above the frequency cutoff
     idx = np.abs(max_w) < upper_cutoff
     if idx.sum() == 0: # no sigificant peak was found
+        print('No significant peak found')
         return []
     max_w = max_w[idx]
     max_vs = max_vs[idx]
@@ -239,6 +242,7 @@ class FirstOrderSignificantPeaks(dj.Computed):
         return FirstOrderSpikeSpectra()
 
     def _make_tuples(self, key):
+        double_peaks = -1
         data = (FirstOrderSpikeSpectra() & key).fetch1()
         run = (Runs() & key).fetch1()
         cell = (Cells() & key).fetch1()
@@ -256,8 +260,62 @@ class FirstOrderSignificantPeaks(dj.Computed):
                                             interesting_frequencies, data['critical_value'])
         for s in sas:
             s.update(key)
-            self.insert(s)
+            try:
+                self.insert(s)
+            except pymysql.IntegrityError: # sometimes one peak has two peaks nearby
+                print("Found double peak")
+                s['refined'] = double_peaks
+                self.insert(s)
+                double_peaks -= 1
 
+
+@server
+class SecondOrderSignificantPeaks(dj.Computed):
+    definition = """
+    # hold significant peaks in spektra
+
+    stimulus_coeff          : int   # how many multiples of the stimulus
+    eod_coeff               : int   # how many multiples of the eod
+    baseline_coeff          : int   # how many multiples of the baseline firing rate
+    refined                 : int   # whether the search was refined or not
+    ->SecondOrderSpikeSpectra
+
+    ---
+
+    frequency               : double # frequency at which there is significant locking
+    vector_strength         : double # vector strength at that frequency
+    tolerance               : double # tolerance within which a peak was accepted
+    """
+
+    @property
+    def populate_relation(self):
+        return SecondOrderSpikeSpectra()
+
+    def _make_tuples(self, key):
+        double_peaks = -1
+        data = (SecondOrderSpikeSpectra() & key).fetch1()
+        run = (Runs() & key).fetch1()
+        cell = (Cells() & key).fetch1()
+
+        dt = 1 / run['samplingrate']
+
+        st = (SpikeTimes() & key).fetch(as_dict=True)
+        spikes = [s['times'] / 1000 for s in st]  # convert to s
+
+        interesting_frequencies = {'stimulus_coeff': run['eod'] + run['delta_f'], 'eod_coeff': run['eod'],
+                                   'baseline_coeff': cell['baseline']}
+
+        sas = find_significant_peaks(spikes, data['frequencies'], data['vector_strengths'],
+                                            interesting_frequencies, data['critical_value'])
+        for s in sas:
+            s.update(key)
+            try:
+                self.insert(s)
+            except pymysql.IntegrityError: # sometimes one peak has two peaks nearby
+                print("Found double peak")
+                s['refined'] = double_peaks
+                self.insert(s)
+                double_peaks -= 1
 
 
 if __name__ == "__main__":
@@ -267,5 +325,8 @@ if __name__ == "__main__":
     soss = SecondOrderSpikeSpectra()
     soss.populate()
 
-    fosp = FirstOrderSignificantPeaks()
-    fosp.populate()
+    # fosp = FirstOrderSignificantPeaks()
+    # fosp.populate()
+
+    sosp = SecondOrderSignificantPeaks()
+    sosp.populate()
