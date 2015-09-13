@@ -130,36 +130,6 @@ def load_traces(relacsdir, stimuli):
 
 
 @server
-class EFishes(dj.Manual):
-    definition = """
-    # Basics weakly electric fish subject info
-
-    fish_id                                 : varchar(40)     # unique fish id
-    ---
-
-    eod_frequency                           : float # EOD frequency in Hz
-    species = "Apteronotus leptorhynchus"   : enum('Apteronotus leptorhynchus', 'Eigenmannia virescens') # species
-    gender  = "unknown"                      : enum('unknown', 'make', 'female') # gender
-    weight : float # weight in g
-    size: float  # size in cm
-    """
-
-    def make_tuples(self):
-        for (cell,) in PaperCells().fetch():
-            a = scan_info(cell)
-            a = a['Subject'] if 'Subject' in a else a['Recording']['Subject']
-            dat = {'fish_id': a['Identifier'],
-                   'eod_frequency': float(a['EOD Frequency'][:-2]),
-                   'gender': a['Gender'].lower(),
-                   'weight': float(a['Weight'][:-1]),
-                   'size': float(a['Size'][:-2])}
-            try:
-                self.insert(dat)
-            except Exception as e:
-                print(e)
-
-
-@server
 class PaperCells(dj.Lookup):
     definition = """
     # What cell ids make it into the paper
@@ -171,50 +141,74 @@ class PaperCells(dj.Lookup):
     def __init__(self):
         dj.Lookup.__init__(self)
 
-    def make_tuples(self):
-        cells = [{'cell_id': '2014-12-03-al'},
-                 {'cell_id': '2014-07-23-ae'},
-                 {'cell_id': '2014-12-11-ae-invivo-1'},
-                 {'cell_id': '2014-12-11-aj-invivo-1'},
-                 {'cell_id': '2014-12-11-al-invivo-1'},
-                 {'cell_id': '2014-09-02-ad'},
-                 {'cell_id': '2014-12-03-ab'},
-                 {'cell_id': '2014-07-23-ai'},
-                 {'cell_id': '2014-12-03-af'},
-                 {'cell_id': '2014-07-23-ab'},
-                 {'cell_id': '2014-07-23-ah'},
-                 {'cell_id': '2014-11-13-aa'},
-                 {'cell_id': '2014-11-26-ab'},
-                 {'cell_id': '2014-11-26-ad'},
-                 {'cell_id': '2014-10-29-aa'},
-                 {'cell_id': '2014-12-03-ae'},
-                 {'cell_id': '2014-09-02-af'},
-                 {'cell_id': '2014-12-11-ah-invivo-1'},
-                 {'cell_id': '2014-07-23-ad'},
-                 {'cell_id': '2014-12-11-ac-invivo-1'},
-                 {'cell_id': '2014-12-11-ab-invivo-1'},
-                 {'cell_id': '2014-12-11-ag-invivo-1'},
-                 {'cell_id': '2014-12-03-ad'},
-                 {'cell_id': '2014-12-11-ak-invivo-1'},
-                 {'cell_id': '2014-09-02-ag'},
-                 {'cell_id': '2014-12-03-ao'},
-                 {'cell_id': '2014-12-03-aj'},
-                 {'cell_id': '2014-07-23-aj'},
-                 {'cell_id': '2014-11-26-ac'},
-                 {'cell_id': '2014-12-03-ai'},
-                 {'cell_id': '2014-06-06-ak'},
-                 {'cell_id': '2014-11-13-ab'},
-                 {'cell_id': '2014-05-21-ab'},
-                 {'cell_id': '2014-07-23-ag'},
-                 {'cell_id': '2014-12-03-ah'},
-                 {'cell_id': '2014-07-23-aa'},
-                 {'cell_id': '2014-12-11-am-invivo-1'},
-                 {'cell_id': '2014-12-11-aa-invivo-1'}]
-        for c in cells:
-            try:
-                self.insert(c)
-            except Exception as e:
-                print(e)
+    contents = [{'cell_id': '2014-12-03-al'},
+                {'cell_id': '2014-07-23-ae'},
+                {'cell_id': '2014-12-11-ae-invivo-1'},
+                {'cell_id': '2014-12-11-aj-invivo-1'},
+                {'cell_id': '2014-12-11-al-invivo-1'},
+                {'cell_id': '2014-09-02-ad'},
+                {'cell_id': '2014-12-03-ab'},
+                {'cell_id': '2014-07-23-ai'},
+                {'cell_id': '2014-12-03-af'},
+                {'cell_id': '2014-07-23-ab'},
+                {'cell_id': '2014-07-23-ah'},
+                {'cell_id': '2014-11-13-aa'},
+                {'cell_id': '2014-11-26-ab'},
+                {'cell_id': '2014-11-26-ad'},
+                {'cell_id': '2014-10-29-aa'},
+                {'cell_id': '2014-12-03-ae'},
+                {'cell_id': '2014-09-02-af'},
+                {'cell_id': '2014-12-11-ah-invivo-1'},
+                {'cell_id': '2014-07-23-ad'},
+                {'cell_id': '2014-12-11-ac-invivo-1'},
+                {'cell_id': '2014-12-11-ab-invivo-1'},
+                {'cell_id': '2014-12-11-ag-invivo-1'},
+                {'cell_id': '2014-12-03-ad'},
+                {'cell_id': '2014-12-11-ak-invivo-1'},
+                {'cell_id': '2014-09-02-ag'},
+                {'cell_id': '2014-12-03-ao'},
+                {'cell_id': '2014-12-03-aj'},
+                {'cell_id': '2014-07-23-aj'},
+                {'cell_id': '2014-11-26-ac'},
+                {'cell_id': '2014-12-03-ai'},
+                {'cell_id': '2014-06-06-ak'},
+                {'cell_id': '2014-11-13-ab'},
+                {'cell_id': '2014-05-21-ab'},
+                {'cell_id': '2014-07-23-ag'},
+                {'cell_id': '2014-12-03-ah'},
+                {'cell_id': '2014-07-23-aa'},
+                {'cell_id': '2014-12-11-am-invivo-1'},
+                {'cell_id': '2014-12-11-aa-invivo-1'}]
+
+
+@server
+class EFishes(dj.Imported):
+    definition = """
+    # Basics weakly electric fish subject info
+
+    fish_id                                 : varchar(40)     # unique fish id
+    ->PaperCells
+    ---
+
+    eod_frequency                           : float # EOD frequency in Hz
+    species = "Apteronotus leptorhynchus"   : enum('Apteronotus leptorhynchus', 'Eigenmannia virescens') # species
+    gender  = "unknown"                     : enum('unknown', 'make', 'female') # gender
+    weight                                  : float # weight in g
+    size                                    : float  # size in cm
+    """
+
+    def _make_tuples(self, key):
+        a = scan_info(key['cell_id'])
+        a = a['Subject'] if 'Subject' in a else a['Recording']['Subject']
+        key.update({'fish_id': a['Identifier'],
+                    'eod_frequency': float(a['EOD Frequency'][:-2]),
+                    'gender': a['Gender'].lower(),
+                    'weight': float(a['Weight'][:-1]),
+                    'size': float(a['Size'][:-2])})
+
+        self.insert1(key)
+
+
 
 
 @server
@@ -232,10 +226,6 @@ class Cells(dj.Imported):
     baseline                         : float    # baseline firing rate in Hz
     """
 
-    @property
-    def populate_relation(self):
-        return PaperCells()
-
     def _make_tuples(self, key):
         a = scan_info(key['cell_id'])
         subj = a['Subject'] if 'Subject' in a else a['Recording']['Subject']
@@ -248,7 +238,7 @@ class Cells(dj.Imported):
                'depth': float(cl['Depth'][:-2]),
                'baseline': float(cl['Cell properties']['Firing Rate1'][:-2])
                }
-        self.insert(dat)
+        self.insert1(dat)
 
 
 @server
@@ -273,10 +263,6 @@ class FICurves(dj.Imported):
     f_p                 : longblob      # fp in Hz
     """
 
-    @property
-    def populate_relation(self):
-        return Cells().project()
-
     def _make_tuples(self, key):
         filename = BASEDIR + key['cell_id'] + '/ficurves1.dat'
         if os.path.isfile(filename):
@@ -289,7 +275,7 @@ class FICurves(dj.Imported):
                 for (name, _), dat in zip(fi_key, fi_data):
                     row[name.lower()] = dat
 
-                self.insert(row)
+                self.insert1(row)
 
 
 @server
@@ -308,10 +294,6 @@ class ISIHistograms(dj.Imported):
     p                   : longblob      # histogram
     """
 
-    @property
-    def populate_relation(self):
-        return Cells().project()
-
     def _make_tuples(self, key):
         filename = BASEDIR + key['cell_id'] + '/baseisih1.dat'
         if os.path.isfile(filename):
@@ -324,8 +306,7 @@ class ISIHistograms(dj.Imported):
                 for (name, _), dat in zip(fi_key, fi_data):
                     row[name.lower()] = dat
 
-                self.insert(row)
-
+                self.insert1(row)
 
 @server
 class Runs(dj.Imported):
@@ -334,7 +315,7 @@ class Runs(dj.Imported):
 
     run_id                     : int # index of the run
     repro="SAM"                : enum('SAM', 'Filestimulus')
-    ->Cells                          # which cell the trial belongs to
+    ->Cells                    # which cell the trial belongs to
 
     ---
 
@@ -347,9 +328,61 @@ class Runs(dj.Imported):
     n_harmonics             : int # number of harmonics in the stimulus
     """
 
-    @property
-    def populate_relation(self):
-        return Cells().project()
+    class SpikeTimes(dj.Part):
+        definition = """
+        # table holding spike time of trials
+
+        -> Runs
+        trial_id                   : int # index of the trial within run
+
+        ---
+
+        times                      : longblob # spikes times in ms
+        """
+
+    class GlobalEField(dj.Part, dj.Manual):
+        definition = """
+        # table holding global efield trace
+
+        -> Runs
+        trial_id                   : int # index of the trial within run
+        ---
+
+        global_efield                      : longblob # spikes times
+        """
+
+    class LocalEOD(dj.Part, dj.Manual):
+        definition = """
+        # table holding local EOD traces
+
+        -> Runs
+        trial_id                   : int # index of the trial within run
+        ---
+
+        local_efield                      : longblob # spikes times
+        """
+
+    class GlobalEOD(dj.Part, dj.Manual):
+        definition = """
+        # table holding global EOD traces
+
+        -> Runs
+        trial_id                   : int # index of the trial within run
+        ---
+
+        global_voltage                      : longblob # spikes times
+        """
+
+    class VoltageTraces(dj.Part, dj.Manual):
+        definition = """
+        # table holding voltage traces
+
+        -> Runs
+        trial_id                   : int # index of the trial within run
+        ---
+
+        membrane_potential                      : longblob # spikes times
+        """
 
     def _make_tuples(self, key):
         repro = 'SAM'
@@ -361,11 +394,11 @@ class Runs(dj.Imported):
             spikes = load(spikefile)
             spi_meta, spi_key, spi_data = spikes.selectall()
 
-            globalefield = GlobalEField()
-            localeod = LocalEOD()
-            globaleod = GlobalEOD()
-            spike_table = SpikeTimes()
-            v1trace = VoltageTraces()
+            globalefield = Runs.GlobalEField()
+            localeod = Runs.LocalEOD()
+            globaleod = Runs.GlobalEOD()
+            spike_table = Runs.SpikeTimes()
+            v1trace = Runs.VoltageTraces()
 
             for run_idx, (spi_d, spi_m) in enumerate(zip(spi_data, spi_meta)):
                 print("\t%s run %i" % (repro, run_idx))
@@ -440,99 +473,35 @@ class Runs(dj.Imported):
                 to_insert['n_harmonics'] = nharmonics
                 to_insert['repro'] = 'SAM'
 
-                self.insert(to_insert)
+                self.insert1(to_insert)
                 for trial_idx, (start, stop) in enumerate(zip(start_idx, stop_idx)):
                     tmp = dict(run_id=run_idx, trial_id=trial_idx, repro='SAM', **key)
-                    tmp['trace'] = traces['V-1']['data'][start:stop]
-                    v1trace.insert(tmp, replace=True)
+                    tmp['membrane_potential'] = traces['V-1']['data'][start:stop]
+                    v1trace.insert1(tmp, replace=True)
+                    del tmp['membrane_potential']
 
-                    tmp['trace'] = traces['GlobalEFie']['data'][start:stop]
-                    globalefield.insert(tmp, replace=True)
+                    tmp['global_efield'] = traces['GlobalEFie']['data'][start:stop]
+                    globalefield.insert1(tmp, replace=True)
+                    del tmp['global_efield']
 
-                    tmp['trace'] = traces['LocalEOD-1']['data'][start:stop]
-                    localeod.insert(tmp, replace=True)
+                    tmp['local_efield'] = traces['LocalEOD-1']['data'][start:stop]
+                    localeod.insert1(tmp, replace=True)
+                    del tmp['local_efield']
 
-                    tmp['trace'] = traces['EOD']['data'][start:stop]
-                    globaleod.insert(tmp, replace=True)
+                    tmp['global_voltage'] = traces['EOD']['data'][start:stop]
+                    globaleod.insert1(tmp, replace=True)
+                    del tmp['global_voltage']
 
-                    tmp.pop('trace')
                     tmp['times'] = spi_d[trial_idx]
-                    spike_table.insert(tmp, replace=True)
+                    spike_table.insert1(tmp, replace=True)
 
-@server
-class SpikeTimes(dj.Subordinate, dj.Manual):
-    definition = """
-    # table holding spike time of trials
-
-    -> Runs
-    trial_id                   : int # index of the trial within run
-
-    ---
-
-    times                      : longblob # spikes times in ms
-    """
-
-
-@server
-class GlobalEField(dj.Subordinate, dj.Manual):
-    definition = """
-    # table holding global efield trace
-
-    -> Runs
-    trial_id                   : int # index of the trial within run
-
-    ---
-
-    trace                      : longblob # spikes times
-    """
-
-
-@server
-class LocalEOD(dj.Subordinate, dj.Manual):
-    definition = """
-    # table holding local EOD traces
-
-    -> Runs
-    trial_id                   : int # index of the trial within run
-
-    ---
-
-    trace                      : longblob # spikes times
-    """
-
-
-@server
-class GlobalEOD(dj.Subordinate, dj.Manual):
-    definition = """
-    # table holding global EOD traces
-
-    -> Runs
-    trial_id                   : int # index of the trial within run
-
-    ---
-
-    trace                      : longblob # spikes times
-    """
-
-
-@server
-class VoltageTraces(dj.Subordinate, dj.Manual):
-    definition = """
-    # table holding voltage traces
-
-    -> Runs
-    trial_id                   : int # index of the trial within run
-    ---
-
-    trace                      : longblob # spikes times
-    """
 
 @server
 class GlobalEFieldPeaksTroughs(dj.Computed):
     definition = """
     # table for peaks and troughs in the global efield
 
-    -> GlobalEField
+    -> Runs.GlobalEField
 
     ---
 
@@ -540,24 +509,20 @@ class GlobalEFieldPeaksTroughs(dj.Computed):
     troughs             : longblob # trough indices
     """
 
-    @property
-    def populate_relation(self):
-        return GlobalEField()
-
     def _make_tuples(self, key):
 
-        dat = (GlobalEField() & key).fetch(as_dict=True)
+        dat = (Runs.GlobalEField() & key).fetch(as_dict=True)
         assert len(dat) == 1, 'key returned more than one element'
 
-        _, key['peaks'], _, key['troughs'] = peakdet(dat[0]['trace'])
-        self.insert(key)
+        _, key['peaks'], _, key['troughs'] = peakdet(dat[0]['global_efield'])
+        self.insert1(key)
 
 @server
 class LocalEODPeaksTroughs(dj.Computed):
     definition = """
     # table for peaks and troughs in local EOD
 
-    -> LocalEOD
+    -> Runs.LocalEOD
 
     ---
 
@@ -565,42 +530,36 @@ class LocalEODPeaksTroughs(dj.Computed):
     troughs             : longblob # trough indices
     """
 
-    @property
-    def populate_relation(self):
-        return LocalEOD()
-
     def _make_tuples(self, key):
 
-        dat = (LocalEOD() & key).fetch(as_dict=True)
+        dat = (Runs.LocalEOD() & key).fetch(as_dict=True)
         assert len(dat) == 1, 'key returned more than one element'
 
-        _, key['peaks'], _, key['troughs'] = peakdet(dat[0]['trace'])
-        self.insert(key)
+        _, key['peaks'], _, key['troughs'] = peakdet(dat[0]['local_efield'])
+        self.insert1(key)
 
 
 if __name__ == "__main__":
-    # pc = PaperCells()
+    pc = PaperCells()
     # pc.make_tuples()
     #
-    # ef = EFishes()
-    # ef.make_tuples()
+    ef = EFishes()
+    ef.populate(reserve_jobs=True)
     #
-    # cl = Cells()
-    # cl.populate()
-    #
-    # fi = FICurves()
-    # fi.populate()
-    # print(fi)
-    #
-    # isi = ISIHistograms()
-    # isi.populate()
-    # print(isi)
-    #
-    # sams = Runs()
-    # sams.populate(restriction=cl)
+    cl = Cells()
+    cl.populate(reserve_jobs=True)
+
+    fi = FICurves()
+    fi.populate(reserve_jobs=True)
+
+    isi = ISIHistograms()
+    isi.populate(reserve_jobs=True)
+
+    sams = Runs()
+    sams.populate(restriction=cl, reserve_jobs=True)
 
     pts = GlobalEFieldPeaksTroughs()
-    pts.populate()
+    pts.populate(reserve_jobs=True)
 
     lpts = LocalEODPeaksTroughs()
-    lpts.populate()
+    lpts.populate(reserve_jobs=True)
