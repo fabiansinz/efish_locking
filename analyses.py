@@ -199,84 +199,82 @@ class FirstOrderSpikeSpectra(dj.Computed):
         vs[np.isnan(vs)] = 0
         self.insert1(key)
 
-# @server
-# class SecondOrderSpikeSpectra(dj.Computed):
-#     definition = """
-#     # table that holds 2nd order vector strength spectra
-#     -> Runs                  # each run has a spectrum
-#
-#     ---
-#
-#     frequencies             : longblob # frequencies at which the spectra are computed
-#     vector_strengths        : longblob # vector strengths at those frequencies
-#     critical_value          : float    # critical value for significance with alpha=0.001
-#     """
-#
-#     @property
-#     def populated_from(self):
-#         return Runs()
-#
-#     def _make_tuples(self, key):
-#         print('Processing', key['cell_id'], 'run', key['run_id'], )
-#         dat = (Runs() & key).fetch(as_dict=True)[0]
-#         dt = 1 / dat['samplingrate']
-#         t = np.arange(0, dat['duration'], dt)
-#         st = (SpikeTimes() & key).fetch(as_dict=True)
-#         st = [s['times'] / 1000 for s in st]  # convert to s
-#
-#         key['frequencies'], key['vector_strengths'], key['critical_value'] = \
-#             compute_2nd_order_spectrum(st, t, 1 / dt, alpha=0.001, method='poisson')
-#         self.insert1(key)
-#
-#
-# @server
-# class FirstOrderSignificantPeaks(dj.Computed):
-#     definition = """
-#     # hold significant peaks in spektra
-#
-#     stimulus_coeff          : int   # how many multiples of the stimulus
-#     eod_coeff               : int   # how many multiples of the eod
-#     baseline_coeff          : int   # how many multiples of the baseline firing rate
-#     refined                 : int   # whether the search was refined or not
-#     ->FirstOrderSpikeSpectra
-#
-#     ---
-#
-#     frequency               : double # frequency at which there is significant locking
-#     vector_strength         : double # vector strength at that frequency
-#     tolerance               : double # tolerance within which a peak was accepted
-#     """
-#
-#     @property
-#     def populated_from(self):
-#         return FirstOrderSpikeSpectra()
-#
-#     def _make_tuples(self, key):
-#         double_peaks = -1
-#         data = (FirstOrderSpikeSpectra() & key).fetch1()
-#         run = (Runs() & key).fetch1()
-#         cell = (Cells() & key).fetch1()
-#
-#         dt = 1 / run['samplingrate']
-#
-#         pt = (GlobalEFieldPeaksTroughs() & key).fetch(as_dict=True)
-#         st = (SpikeTimes() & key).fetch(as_dict=True)
-#         spikes = np.hstack([s['times'] / 1000 - p['peaks'][0] * dt for s, p in zip(st, pt)])
-#
-#         interesting_frequencies = {'stimulus_coeff': run['eod'] + run['delta_f'], 'eod_coeff': run['eod'],
-#                                    'baseline_coeff': cell['baseline']}
-#
-#         sas = find_significant_peaks(spikes, data['frequencies'], data['vector_strengths'],
-#                                             interesting_frequencies, data['critical_value'])
-#         for s in sas:
-#             s.update(key)
-#             try:
-#                 self.insert(s)
-#             except pymysql.IntegrityError: # sometimes one peak has two peaks nearby
-#                 print("Found double peak")
-#                 s['refined'] = double_peaks
-#                 self.insert1(s)
-#                 double_peaks -= 1
+@server
+class SecondOrderSpikeSpectra(dj.Computed):
+    definition = """
+    # table that holds 2nd order vector strength spectra
+    -> Runs                  # each run has a spectrum
+
+    ---
+
+    frequencies             : longblob # frequencies at which the spectra are computed
+    vector_strengths        : longblob # vector strengths at those frequencies
+    critical_value          : float    # critical value for significance with alpha=0.001
+    """
+
+    def _make_tuples(self, key):
+        print('Processing', key['cell_id'], 'run', key['run_id'], )
+        dat = (Runs() & key).fetch(as_dict=True)[0]
+        dt = 1 / dat['samplingrate']
+        t = np.arange(0, dat['duration'], dt)
+        st = (Runs.SpikeTimes() & key).fetch(as_dict=True)
+        st = [s['times'] / 1000 for s in st]  # convert to s
+
+        key['frequencies'], key['vector_strengths'], key['critical_value'] = \
+            compute_2nd_order_spectrum(st, t, 1 / dt, alpha=0.001, method='poisson')
+        self.insert1(key)
+
+
+@server
+class FirstOrderSignificantPeaks(dj.Computed):
+    definition = """
+    # hold significant peaks in spektra
+
+    stimulus_coeff          : int   # how many multiples of the stimulus
+    eod_coeff               : int   # how many multiples of the eod
+    baseline_coeff          : int   # how many multiples of the baseline firing rate
+    refined                 : int   # whether the search was refined or not
+    ->FirstOrderSpikeSpectra
+
+    ---
+
+    frequency               : double # frequency at which there is significant locking
+    vector_strength         : double # vector strength at that frequency
+    tolerance               : double # tolerance within which a peak was accepted
+    """
+
+    @property
+    def populated_from(self):
+        return FirstOrderSpikeSpectra()
+
+    def _make_tuples(self, key):
+        double_peaks = -1
+        data = (FirstOrderSpikeSpectra() & key).fetch1()
+        run = (Runs() & key).fetch1()
+        cell = (Cells() & key).fetch1()
+
+        dt = 1 / run['samplingrate']
+        trials = ((GlobalEFieldPeaksTroughs() * Runs.SpikeTimes()) & key)
+
+        # pt = (GlobalEFieldPeaksTroughs() & key).fetch(as_dict=True)
+        # st = (Runs.SpikeTimes() & key).fetch(as_dict=True)
+        # spikes = np.hstack([s['times'] / 1000 - p['peaks'][0] * dt for s, p in zip(st, pt)])
+        spikes = np.hstack([s / 1000 - p[0] * dt for s, p in zip(*trials.fetch['times','peaks'])])
+
+        interesting_frequencies = {'stimulus_coeff': run['eod'] + run['delta_f'], 'eod_coeff': run['eod'],
+                                   'baseline_coeff': cell['baseline']}
+
+        sas = find_significant_peaks(spikes, data['frequencies'], data['vector_strengths'],
+                                            interesting_frequencies, data['critical_value'])
+        for s in sas:
+            s.update(key)
+            try:
+                self.insert1(s)
+            except pymysql.IntegrityError: # sometimes one peak has two peaks nearby
+                print("Found double peak")
+                s['refined'] = double_peaks
+                self.insert1(s)
+                double_peaks -= 1
 #
 #
 # @server
@@ -332,8 +330,8 @@ if __name__ == "__main__":
     foss = FirstOrderSpikeSpectra()
     foss.populate(reserve_jobs=True)
 
-    # soss = SecondOrderSpikeSpectra()
-    # soss.populate()
+    soss = SecondOrderSpikeSpectra()
+    soss.populate()
     #
     # fosp = FirstOrderSignificantPeaks()
     # fosp.populate()
