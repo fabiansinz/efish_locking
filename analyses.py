@@ -6,6 +6,7 @@ from scipy import stats
 import datajoint as dj
 from datajoint import schema
 import sympy
+from helpers import mkdir
 from schemata import Runs, GlobalEFieldPeaksTroughs, peakdet, Cells
 import numpy as np
 from pycircstat import event_series as es
@@ -179,9 +180,96 @@ def find_significant_peaks(spikes, w, spectrum, peak_dict, threshold, tol=2., up
                 ret.append(tmp)
     return ret
 
+class PlotableSpectrum:
+
+    def plot(self, figbase='figures', f_max=2000, **restrictions):
+        sns.set_context('paper')
+        colors = ['#1b9e77', '#d95f02', '#7570b3', '#e7298a']
+
+        stim, eod, baseline, beat = sympy.symbols('f_s, f_e, f_b, \Delta')
+
+        restrictions = dict(**restrictions)
+        for fos in ((self * Runs()).project() & restrictions).fetch.as_dict:
+            print("Processing %(cell_id)s %(run_id)i" % fos)
+
+            if isinstance(self, FirstOrderSpikeSpectra):
+                peaks = (FirstOrderSignificantPeaks() & fos & restrictions)
+            elif isinstance(self, SecondOrderSpikeSpectra):
+                peaks = (SecondOrderSignificantPeaks() & fos & restrictions)
+            else:
+                raise Exception("Mother class unknown!")
+
+            f, v, alpha, cell, run = (self & fos).fetch1['frequencies', 'vector_strengths', 'critical_value',
+                                                         'cell_id', 'run_id']
+            contrast = (Runs() & fos).fetch1['contrast']
+            cell_type = (Cells() & fos).fetch1['cell_type']
+
+
+            # insert refined vector strengths
+            peak_f, peak_v = peaks.fetch['frequency', 'vector_strength']
+            f = np.hstack((f, peak_f))
+            v = np.hstack((v, peak_v))
+            idx = np.argsort(f)
+            f, v = f[idx], v[idx]
+
+            # generate figure
+            with sns.axes_style('ticks'):
+                fig, ax = plt.subplots(figsize=(7.9, 3.93))
+
+            # only take frequencies within defined ange
+            idx = (f >= 0) & (f <= f_max) & ~np.isnan(v)
+            ax.fill_between(f[idx], 0 * f[idx], 0 * f[idx] + alpha, lw=0, color='silver')
+            ax.fill_between(f[idx], 0 * f[idx], v[idx], lw=0, color='darkslategray')
+
+            ax.set_xlabel('frequency [Hz]')
+            ax.set_ylabel('vector strength')
+            ax.set_ylim((0, 1.))
+            ax.set_xlim((0, f_max))
+            ax.set_yticks([0, .25, .5, .75, 1.0])
+
+            df = pd.DataFrame(peaks.fetch())
+            df['on'] = np.abs(df.ix[:, :3]).sum(axis=1)
+            df = df[df.frequency > 0]
+
+            for freq, freq_group in df.groupby('frequency'):  # get all combinations that have the same frequency
+
+                freq_group = freq_group[
+                    freq_group.on == freq_group.on.min()]  # take the ones that have the lowest factors
+
+                for i, (cs, ce, cb, _, _, _, _, freq, vs, _, _) in freq_group.iterrows():
+                    terms = []
+                    if 0 <= freq <= f_max:
+                        term = (cs * stim + ce * eod + cb * baseline).subs(stim - eod, beat).simplify()
+                        terms.append(sympy.latex(term))
+                    term = ' = '.join(terms)
+
+                    # use different colors and labels depending on the frequency
+                    if cs != 0 and ce == 0 and cb == 0:
+                        ax.plot(freq, vs, 'ok', mfc=colors[0], label='stimulus')
+                    elif cs == 0 and ce != 0 and cb == 0:
+                        ax.plot(freq, vs, 'ok', mfc=colors[1], label='EOD')
+                    elif cs == 0 and ce == 0 and cb != 0:
+                        ax.plot(freq, vs, 'ok', mfc=colors[2], label='baseline firing')
+                    else:
+                        ax.plot(freq, vs, 'ok', mfc=colors[3], label='combinations')
+                    ax.text(freq, vs + .05, r'$%s=%.1f$Hz' % (term, freq), fontsize=5, rotation=80,
+                            ha='left',
+                            va='bottom')
+            sns.despine(fig)
+            handles, labels = ax.get_legend_handles_labels()
+            by_label = OrderedDict(zip(labels, handles))
+            ax.legend(by_label.values(), by_label.keys())
+            fig.tight_layout()
+
+            dir = figbase + '/%s' % (cell_type,)
+            mkdir(dir)
+            filename = dir + '/%s_%.2f%%_run%02i.pdf' % (cell, contrast, run)
+            fig.savefig(filename)
+            plt.close(fig)
+
 
 @server
-class FirstOrderSpikeSpectra(dj.Computed):
+class FirstOrderSpikeSpectra(dj.Computed, PlotableSpectrum):
     definition = """
     # table that holds 1st order vector strength spectra
 
@@ -213,84 +301,11 @@ class FirstOrderSpikeSpectra(dj.Computed):
         vs[np.isnan(vs)] = 0
         self.insert1(key)
 
-    def plot(self, figbase='figures', f_max=2000, **restrictions):
-        sns.set_context('paper')
-        colors = ['#1b9e77', '#d95f02', '#7570b3', '#e7298a']
-
-        stim, eod, baseline, beat = sympy.symbols('f_s, f_e, f_b, \Delta')
-
-        restrictions = dict(**restrictions)
-        for fos in ((self * Runs()).project() & restrictions).fetch.as_dict:
-            peaks = (FirstOrderSignificantPeaks() & fos & restrictions)
-
-            f, v, alpha, cell, run = (self & fos).fetch1['frequencies', 'vector_strengths', 'critical_value',
-                                                         'cell_id', 'run_id']
-            contrast = (Runs() & fos).fetch1['contrast']
-
-
-            # insert refined vector strengths
-            peak_f, peak_v = peaks.fetch['frequency', 'vector_strength']
-            f = np.hstack((f, peak_f))
-            v = np.hstack((v, peak_v))
-            idx = np.argsort(f)
-            f, v = f[idx], v[idx]
-
-            # generate figure
-            with sns.axes_style('ticks'):
-                fig, ax = plt.subplots(figsize=(7.9, 3.93))
-
-            # only take frequencies within defined ange
-            idx = (f >= 0) & (f <= f_max) & ~np.isnan(v)
-            ax.fill_between(f[idx], 0 * f[idx], 0 * f[idx] + alpha, lw=0, color='silver')
-            ax.fill_between(f[idx], 0 * f[idx], v[idx], lw=0, color='darkslategray')
-
-            ax.set_xlabel('frequency [Hz]')
-            ax.set_ylabel('vector strength')
-            ax.set_ylim((0, 1.))
-            ax.set_xlim((0, f_max))
-            ax.set_yticks([0, .25, .5, .75, 1.0])
-
-            df = pd.DataFrame(peaks.fetch())
-            df['on'] = np.abs(df.ix[:, :3]).sum(axis=1)
-            df = df[df.frequency > 0]
-
-            for freq, freq_group in df.groupby('frequency'): # get all combinations that have the same frequency
-
-                freq_group = freq_group[freq_group.on == freq_group.on.min()] # take the ones that have the lowest factors
-
-                for i, (cs, ce, cb, _, _, _, _, freq, vs, _, _) in freq_group.iterrows():
-                    terms = []
-                    if 0 <= freq <= f_max:
-                        term = (cs * stim + ce * eod + cb * baseline).subs(stim - eod, beat).simplify()
-                        terms.append(sympy.latex(term))
-                    term = ' = '.join(terms)
-
-                    # use different colors and labels depending on the frequency
-                    if cs != 0 and ce == 0 and cb == 0:
-                        ax.plot(freq, vs, 'ok', mfc=colors[0], label='stimulus')
-                    elif cs == 0 and ce != 0 and cb == 0:
-                        ax.plot(freq, vs, 'ok', mfc=colors[1], label='EOD')
-                    elif cs == 0 and ce == 0 and cb != 0:
-                        ax.plot(freq, vs, 'ok', mfc=colors[2], label='baseline firing')
-                    else:
-                        ax.plot(freq, vs, 'ok', mfc=colors[3], label='combinations')
-                    ax.text(freq, vs + .05, r'$%s=%.1f$Hz' % (term, freq), fontsize=5, rotation=80,
-                            ha='left',
-                            va='bottom')
-            sns.despine(fig)
-            handles, labels = ax.get_legend_handles_labels()
-            by_label = OrderedDict(zip(labels, handles))
-            ax.legend(by_label.values(), by_label.keys())
-            fig.tight_layout()
-
-            filename = figbase + '/%s_%.2f%%_run%02i.pdf' % (cell, contrast, run)
-            fig.savefig(filename)
-            plt.close(fig)
 
 
 
 @server
-class SecondOrderSpikeSpectra(dj.Computed):
+class SecondOrderSpikeSpectra(dj.Computed, PlotableSpectrum):
     definition = """
     # table that holds 2nd order vector strength spectra
     -> Runs                  # each run has a spectrum
