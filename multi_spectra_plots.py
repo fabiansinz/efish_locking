@@ -1,12 +1,17 @@
+from IPython import embed
 import matplotlib as mpl
-
 from helpers import mkdir
 
 mpl.use('Agg')      # With this line = figure disappears; without this line = warning
 
+import datajoint as dj
+import numpy as np
+import matplotlib.pyplot as plt
 import seaborn as sns
+from schemata import *
 from analyses import *
 from figure_classes import MultiSpectrumFigure
+import os
 
 
 def generate_filename(cell, contrast, base='firstorderspectra'):
@@ -17,20 +22,24 @@ def generate_filename(cell, contrast, base='firstorderspectra'):
 if __name__ == "__main__":
     f_max = 2000 # Hz
     fos = FirstOrderSpikeSpectra()
-    sos = FirstOrderSpikeSpectra()
+    sos = SecondOrderSpikeSpectra()
 
     runs = Runs()
-    for cell in Cells():
+    for cell in Cells().fetch.as_dict:
+
         unit = cell['cell_type']
         print('Processing', cell['cell_id'])
-        for s, base in zip([fos, sos], ['firstorderspectra', 'secondorderspectra']):
+        for spectrum, base_name in zip([fos, sos], ['firstorderspectra', 'secondorderspectra']):
             for contrast in [10, 20]:
-                target_trials = ((s & cell & ('contrast = %i' % (contrast,)) & 'am = 0' & 'n_harmonics = 0') * runs)
+                print("contrast: %.2f%%" % (contrast,))
+                target_trials = ((spectrum & cell & ('contrast = %i' % (contrast,)) & 'am = 0' & 'n_harmonics = 0') * runs)
+
                 if len(target_trials) > 0:
-                    with MultiSpectrumFigure(filename=generate_filename(cell, contrast=contrast, base=base)) as (fig, ax):
+                    with MultiSpectrumFigure(filename=generate_filename(cell, contrast=contrast, base=base_name)) as (fig, ax):
                         y = [0]
                         stim_freq, eod_freq, deltaf_freq = [], [], []
                         for i, spec in enumerate(sorted(target_trials.fetch(as_dict=True), key=lambda x: x['delta_f'])):
+                            print(u"\t\t\u0394 f=%.2f" % spec['delta_f'])
 
                             f, v = spec['frequencies'], spec['vector_strengths']
                             idx = (f >= 0) & (f <= f_max) & ~np.isnan(v)
