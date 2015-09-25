@@ -11,4 +11,5 @@ if __name__ == "__main__":
     # mkdir('figures/detailedfirstorderspectra')
     # FirstOrderSpikeSpectra().plot(figbase='figures/detailedfirstorderspectra', refined=1, am=0)
 
-    # mkdir('figures/phaselocking')
+    mkdir('figures/phaselocking')
+    PhaseLockingHistogram().plot(figbase='figures/phaselocking', refined=1, am=0, n=2)

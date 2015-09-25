@@ -464,13 +464,16 @@ class PhaseLockingHistogram(dj.Computed):
     def _make_tuples(self, key):
         delta_f, eod, samplingrate = (Runs() & key).fetch1['delta_f', 'eod', 'samplingrate']
 
-        # convert spikes to s and center on first peak of stimulus
-        spikes = np.hstack([s / 1000 - p[0] / samplingrate for s, p in
-                            zip(*(Runs.SpikeTimes() * GlobalEFieldPeaksTroughs() & key).fetch['times', 'peaks'])])
 
         if key['eod_coeff'] > 0:
+            # convert spikes to s and center on first peak of stimulus
+            spikes = np.hstack([s / 1000 - p[0] / samplingrate for s, p in
+                                zip(*(Runs.SpikeTimes() * GlobalEFieldPeaksTroughs() & key).fetch['times', 'peaks'])])
             locking_frequency = eod
         else:
+            # convert spikes to s and center on first peak of stimulus
+            spikes = np.hstack([s / 1000 - p[0] / samplingrate for s, p in
+                                zip(*(Runs.SpikeTimes() * GlobalEFieldPeaksTroughs() & key).fetch['times', 'peaks'])])
             locking_frequency = eod + delta_f
         key['locking_frequency'] = locking_frequency
 
@@ -485,7 +488,49 @@ class PhaseLockingHistogram(dj.Computed):
         key['bin_width_radians'] = bin_width_radians
         self.insert1(key)
 
+    def plot(self, figbase, **restrictions):
+        sns.set_context('paper')
+        colors = dict(zip([1.25, 2.5, 5., 10., 20.], sns.color_palette("Set2", n_colors=5)))
+        for cell in Cells().fetch.as_dict:
+            runs = Runs() * self & cell & restrictions
+            delta_fs = np.unique(runs.fetch['delta_f'])
+            eod = runs.fetch['eod'].mean()
 
+            for delta_f in sorted(delta_fs):
+                hists = runs & dict(delta_f=delta_f)
+
+                with sns.axes_style('whitegrid'):
+                    fig = plt.figure(figsize=(3.95, 2))
+                    ax = [fig.add_subplot(1, 2, 1, polar=True), fig.add_subplot(1, 2, 2, polar=True)]
+                for hist in hists.fetch.as_dict.order_by('contrast'):
+                    is_eod = hist['eod_coeff'] > 0
+
+                    h = hist['histogram'].astype(float)
+                    dt = hist['bin_width_radians']  # bin width in ms
+                    h /= h.sum() * dt
+
+                    t = (np.arange(len(h)) * dt + dt / 2)
+                    t = np.hstack((t, t[0]))
+                    h = np.hstack((h, h[0]))
+                    contrast = hist['contrast']
+                    ax[int(is_eod)].fill_between(t, 0 * h, h,
+                                                 color=colors[contrast], alpha=.2)
+                    ax[int(is_eod)].plot(t, h, color=colors[contrast], label='%.2f%%' % contrast, lw=1)
+                    thetaticks = np.arange(0, 360, 45)
+                    ax[int(is_eod)].set_thetagrids(thetaticks, frac=1.3)
+
+                ax[1].legend(bbox_to_anchor=(2.0, 1.2))
+                ax[0].set_title('EOD %.2fHz' % eod, position=[.5, 1.2])
+                ax[1].set_title('Stimulus %.2fHz' % (eod + delta_f), position=[.5, 1.2])
+                ax[0].set_yticks([])
+                ax[1].set_yticks([])
+                fig.tight_layout()
+                fig.subplots_adjust(right=.75)
+                dir = figbase + '/%s' % (cell['cell_type'],)
+                mkdir(dir)
+                filename = dir + '/%s_df%.2f.pdf' % (cell['cell_id'],  delta_f)
+                fig.savefig(filename)
+                plt.close(fig)
 if __name__ == "__main__":
     # foss = FirstOrderSpikeSpectra()
     # foss.populate(reserve_jobs=True)
