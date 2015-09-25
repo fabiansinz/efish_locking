@@ -180,8 +180,8 @@ def find_significant_peaks(spikes, w, spectrum, peak_dict, threshold, tol=2., up
                 ret.append(tmp)
     return ret
 
-class PlotableSpectrum:
 
+class PlotableSpectrum:
     def plot(self, figbase='figures', f_max=2000, **restrictions):
         sns.set_context('paper')
         colors = ['#1b9e77', '#d95f02', '#7570b3', '#e7298a']
@@ -201,7 +201,9 @@ class PlotableSpectrum:
 
             f, v, alpha, cell, run = (self & fos).fetch1['frequencies', 'vector_strengths', 'critical_value',
                                                          'cell_id', 'run_id']
-            contrast = (Runs() & fos).fetch1['contrast']
+
+            contrast, delta_f = (Runs() & fos).fetch1['contrast', 'delta_f']
+
             cell_type = (Cells() & fos).fetch1['cell_type']
 
 
@@ -239,8 +241,11 @@ class PlotableSpectrum:
                 for i, (cs, ce, cb, _, _, _, _, freq, vs, _, _) in freq_group.iterrows():
                     terms = []
                     if 0 <= freq <= f_max:
-                        term = (cs * stim + ce * eod + cb * baseline).subs(stim - eod, beat).simplify()
-                        terms.append(sympy.latex(term))
+                        term = cs * stim + ce * eod + cb * baseline
+                        if (cs < 0 and ce > 0) or (cs > 0 and ce < 0):
+                            coeff = np.sign(ce) * min(abs(cs), abs(ce))
+                            term = term + coeff * (stim - eod) - coeff * beat
+                        terms.append(sympy.latex(term.simplify()))
                     term = ' = '.join(terms)
 
                     # use different colors and labels depending on the frequency
@@ -263,7 +268,7 @@ class PlotableSpectrum:
 
             dir = figbase + '/%s' % (cell_type,)
             mkdir(dir)
-            filename = dir + '/%s_%.2f%%_run%02i.pdf' % (cell, contrast, run)
+            filename = dir + '/%s_%.2f%%_df%.2f_run%02i.pdf' % (cell, contrast, delta_f, run)
             fig.savefig(filename)
             plt.close(fig)
 
@@ -300,8 +305,6 @@ class FirstOrderSpikeSpectra(dj.Computed, PlotableSpectrum):
         vs = key['vector_strengths']
         vs[np.isnan(vs)] = 0
         self.insert1(key)
-
-
 
 
 @server
@@ -424,6 +427,65 @@ class SecondOrderSignificantPeaks(dj.Computed):
                 double_peaks -= 1
 
 
+@server
+class SamplingPointsPerBin(dj.Lookup):
+    definition = """
+    # sampling points per bin
+
+    n           : int # sampling points per bin
+    ---
+
+    """
+
+    contents = [(2,), (4,), (8,)]
+
+
+@server
+class PhaseLockingHistogram(dj.Computed):
+    definition = """
+    # phase locking histogram at significant peaks
+
+    -> FirstOrderSignificantPeaks
+    -> SamplingPointsPerBin
+    ---
+    locking_frequency       : double   # frequency for which the locking is computed
+    bin_width_radians        : double   # bin width in radians
+    bin_width_time          : double   # bin width in time
+    histogram               : longblob # vector of counts
+    """
+
+    @property
+    def populated_from(self):
+        return SamplingPointsPerBin() * FirstOrderSignificantPeaks() \
+               & 'baseline_coeff=0' \
+               & '((stimulus_coeff=1 and eod_coeff=0) or (stimulus_coeff=0 and eod_coeff=1))' \
+               & 'refined=1'
+
+    def _make_tuples(self, key):
+        delta_f, eod, samplingrate = (Runs() & key).fetch1['delta_f', 'eod', 'samplingrate']
+
+        # convert spikes to s and center on first peak of stimulus
+        spikes = np.hstack([s / 1000 - p[0] / samplingrate for s, p in
+                            zip(*(Runs.SpikeTimes() * GlobalEFieldPeaksTroughs() & key).fetch['times', 'peaks'])])
+
+        if key['eod_coeff'] > 0:
+            locking_frequency = eod
+        else:
+            locking_frequency = eod + delta_f
+        key['locking_frequency'] = locking_frequency
+
+        cycle = 1 / locking_frequency
+        bin_width_time = 1 / samplingrate * key['n']
+        bin_width_radians = bin_width_time / cycle * np.pi * 2
+        bins = np.arange(0, cycle + bin_width_time, bin_width_time)
+        spikes %= cycle
+        key['histogram'], _ = np.histogram(spikes, bins=bins)
+
+        key['bin_width_time'] = bin_width_time
+        key['bin_width_radians'] = bin_width_radians
+        self.insert1(key)
+
+
 if __name__ == "__main__":
     # foss = FirstOrderSpikeSpectra()
     # foss.populate(reserve_jobs=True)
@@ -431,8 +493,11 @@ if __name__ == "__main__":
     # soss = SecondOrderSpikeSpectra()
     # soss.populate()
 
-    fosp = FirstOrderSignificantPeaks()
-    fosp.populate()
+    # fosp = FirstOrderSignificantPeaks()
+    # fosp.populate()
+    #
+    # sosp = SecondOrderSignificantPeaks()
+    # sosp.populate()
 
-    sosp = SecondOrderSignificantPeaks()
-    sosp.populate()
+    plh = PhaseLockingHistogram()
+    plh.populate()

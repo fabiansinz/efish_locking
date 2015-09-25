@@ -496,6 +496,7 @@ class Runs(dj.Imported):
                     spike_table.insert1(tmp, replace=True)
 
 
+
 @server
 class GlobalEFieldPeaksTroughs(dj.Computed):
     definition = """
