@@ -508,38 +508,6 @@ class PhaseLockingHistogram(dj.Computed):
 
             histograms.insert1(key_sub)
 
-    # def plot(self, ax_stim, ax_eod, restrictions, n=2):
-    #     ax = [ax_stim, ax_eod]
-    #     runs = Runs() * self & ('n=%i' % n) & restrictions
-    #
-    #     assert len(np.unique(runs.fetch['contrast'])) == 1, 'Contrast should be unique'
-    #     delta_fs = np.unique(runs.fetch['delta_f'])
-    #     delta_fs = np.array([delta_fs.min(), delta_fs.max()])
-    #     eod = runs.fetch['eod'].mean()
-    #     colors = ['gray', 'black']
-    #
-    #     for color_idx, delta_f in enumerate(sorted(delta_fs)):
-    #         hists = runs & dict(delta_f=delta_f)
-    #
-    #         for hist in hists.fetch.as_dict:
-    #             is_eod = hist['eod_coeff'] > 0
-    #
-    #             h = hist['histogram'].astype(float)
-    #             dt = hist['bin_width_radians']  # bin width in ms
-    #             h /= h.sum() * dt
-    #
-    #             t = (np.arange(len(h)) * dt + dt / 2)
-    #             ax[int(is_eod)].plot(t, h, color=colors[color_idx], lw=1, label=r'$\Delta f=%.0f$Hz' % delta_f)
-    #             ax[int(is_eod)].set_ylim((0,1))
-    #             ax[int(is_eod)].set_title(('EOD %.2fHz' % eod) if is_eod else 'Stimulus')
-    #             # ax[int(is_eod)].set_xticks(np.arange(0, 360, 45))
-    #
-    #             # ax[int(is_eod)].set_thetagrids(thetaticks, frac=1.3)
-    #
-    #         ax[0].legend(prop={'size':6})
-    #         ax[1].legend(prop={'size':6})
-
-
     def violin_plot(self, ax, restrictions):
         runs = Runs() * self & restrictions
         df = pd.concat([pd.DataFrame(item) for item in runs.fetch.as_dict()])
