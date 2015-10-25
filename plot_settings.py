@@ -1,14 +1,6 @@
-import matplotlib
-matplotlib.rc('font', family='sans-serif')
-matplotlib.rc('font', serif='Arial')
-matplotlib.rc('font', size=7)
-matplotlib.rc('text', usetex='false')
-matplotlib.rc('figure', dpi='300')
-matplotlib.rc('figure', facecolor='w')
-
-
-
 params = {'axes.labelsize': 7,
+          'axes.labelpad': 1.0,
+          'axes.titlesize': 7,
           'text.fontsize': 7,
           'xtick.labelsize': 7,
           'ytick.labelsize': 7,
@@ -19,10 +11,20 @@ params = {'axes.labelsize': 7,
           'ytick.major.width': 1,
           'ytick.minor.width': 1,
           'xtick.major.size': 3,
-          'xtick.minor.size': 3,
-          'ytick.major.size': 3,
+          'xtick.major.pad': 3,
+          'xtick.minor.pad': 3,
+          'ytick.major.pad': 3,
+          'ytick.minor.pad': 3,
+          'xtick.minor.size': 2,
+          'ytick.major.size': 2,
           'ytick.minor.size': 3,
-          'axes.linewidth': 1
+          'axes.linewidth': 1,
+          'font.family': 'sans-serif',
+          'font.serif': 'Arial',
+          'font.size': 7,
+          'text.usetex': False,
+          'figure.dpi': 300,
+          'figure.facecolor': 'w',
 }
 
-matplotlib.rcParams.update(params)
+

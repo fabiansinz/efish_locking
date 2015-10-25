@@ -4,7 +4,7 @@
     "connection.init_function": null,
     "safemode": true,
     "display.width": 14,
-    "database.host": "snowyowl.am28.uni-tuebingen.de",
+    "database.host": "dragon",
     "database.user": "efish",
     "database.password": "chop$fish",
     "database.port": 3306

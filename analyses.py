@@ -7,17 +7,16 @@ import datajoint as dj
 from datajoint import schema
 import sympy
 from helpers import mkdir
-from schemata import Runs, GlobalEFieldPeaksTroughs, peakdet, Cells
+from schemata import Runs, GlobalEFieldPeaksTroughs, peakdet, Cells, LocalEODPeaksTroughs
 import numpy as np
 from pycircstat import event_series as es
 import pycircstat as circ
 from scipy import optimize
 import matplotlib.pyplot as plt
 import seaborn as sns
-import plot_settings
 from collections import OrderedDict
 
-server = schema('efish', locals())
+server = schema('efish_locking', locals())
 
 
 def compute_1st_order_spectrum(aggregated_spikes, sampling_rate, alpha=0.001):
@@ -446,91 +445,114 @@ class PhaseLockingHistogram(dj.Computed):
     # phase locking histogram at significant peaks
 
     -> FirstOrderSignificantPeaks
-    -> SamplingPointsPerBin
     ---
     locking_frequency       : double   # frequency for which the locking is computed
-    bin_width_radians        : double   # bin width in radians
-    bin_width_time          : double   # bin width in time
-    histogram               : longblob # vector of counts
+    peak_frequency          : double   # frequency as determined by the peaks of the electric field
+    spikes                  : longblob # union of spike times over trials relative to period of locking frequency
+    vector_strength         : double   # vector strength computed from the spikes for sanity checking
     """
+
+    class Histograms(dj.Part):
+        definition = """
+        ->PhaseLockingHistogram
+        ->SamplingPointsPerBin
+        ---
+        bin_width_radians       : double   # bin width in radians
+        bin_width_time          : double   # bin width in time
+        histogram               : longblob # vector of counts
+        """
 
     @property
     def populated_from(self):
-        return SamplingPointsPerBin() * FirstOrderSignificantPeaks() \
+        return FirstOrderSignificantPeaks() \
                & 'baseline_coeff=0' \
                & '((stimulus_coeff=1 and eod_coeff=0) or (stimulus_coeff=0 and eod_coeff=1))' \
                & 'refined=1'
 
     def _make_tuples(self, key):
+        key_sub = dict(key)
         delta_f, eod, samplingrate = (Runs() & key).fetch1['delta_f', 'eod', 'samplingrate']
-
+        locking_frequency = (FirstOrderSignificantPeaks() & key).fetch1['frequency']
 
         if key['eod_coeff'] > 0:
-            # convert spikes to s and center on first peak of stimulus
-            spikes = np.hstack([s / 1000 - p[0] / samplingrate for s, p in
-                                zip(*(Runs.SpikeTimes() * GlobalEFieldPeaksTroughs() & key).fetch['times', 'peaks'])])
-            locking_frequency = eod
+            # convert spikes to s and center on first peak of eod
+            times, peaks =(Runs.SpikeTimes() * LocalEODPeaksTroughs() & key).fetch['times', 'peaks']
+
+            spikes = np.hstack([s / 1000 - p[0] / samplingrate for s, p in zip(times, peaks)])
         else:
             # convert spikes to s and center on first peak of stimulus
-            spikes = np.hstack([s / 1000 - p[0] / samplingrate for s, p in
-                                zip(*(Runs.SpikeTimes() * GlobalEFieldPeaksTroughs() & key).fetch['times', 'peaks'])])
-            locking_frequency = eod + delta_f
+            times, peaks = (Runs.SpikeTimes() * GlobalEFieldPeaksTroughs() & key).fetch['times', 'peaks']
+            spikes = np.hstack([s / 1000 - p[0] / samplingrate for s, p in zip(times, peaks)])
+
+        key['peak_frequency'] = samplingrate/np.mean([np.diff(p).mean() for p in peaks])
         key['locking_frequency'] = locking_frequency
 
         cycle = 1 / locking_frequency
-        bin_width_time = 1 / samplingrate * key['n']
-        bin_width_radians = bin_width_time / cycle * np.pi * 2
-        bins = np.arange(0, cycle + bin_width_time, bin_width_time)
         spikes %= cycle
-        key['histogram'], _ = np.histogram(spikes, bins=bins)
 
-        key['bin_width_time'] = bin_width_time
-        key['bin_width_radians'] = bin_width_radians
+        key['spikes'] = spikes/cycle*2*np.pi
+        key['vector_strength'] = 1 - circ.var(key['spikes'])
+
         self.insert1(key)
 
-    def plot(self, figbase, **restrictions):
-        sns.set_context('paper')
-        colors = dict(zip([1.25, 2.5, 5., 10., 20.], sns.color_palette("Set2", n_colors=5)))
-        for cell in Cells().fetch.as_dict:
-            runs = Runs() * self & cell & restrictions
-            delta_fs = np.unique(runs.fetch['delta_f'])
-            eod = runs.fetch['eod'].mean()
+        histograms = self.Histograms()
+        for n in SamplingPointsPerBin().fetch:
+            n = int(n[0])
+            bin_width_time = n / samplingrate
+            bin_width_radians = bin_width_time / cycle * np.pi * 2
+            bins = np.arange(0, cycle + bin_width_time, bin_width_time)
+            key_sub['n'] = n
+            key_sub['histogram'], _ = np.histogram(spikes, bins=bins)
+            key_sub['bin_width_time'] = bin_width_time
+            key_sub['bin_width_radians'] = bin_width_radians
 
-            for delta_f in sorted(delta_fs):
-                hists = runs & dict(delta_f=delta_f)
+            histograms.insert1(key_sub)
 
-                with sns.axes_style('whitegrid'):
-                    fig = plt.figure(figsize=(3.95, 2))
-                    ax = [fig.add_subplot(1, 2, 1, polar=True), fig.add_subplot(1, 2, 2, polar=True)]
-                for hist in hists.fetch.as_dict.order_by('contrast'):
-                    is_eod = hist['eod_coeff'] > 0
+    # def plot(self, ax_stim, ax_eod, restrictions, n=2):
+    #     ax = [ax_stim, ax_eod]
+    #     runs = Runs() * self & ('n=%i' % n) & restrictions
+    #
+    #     assert len(np.unique(runs.fetch['contrast'])) == 1, 'Contrast should be unique'
+    #     delta_fs = np.unique(runs.fetch['delta_f'])
+    #     delta_fs = np.array([delta_fs.min(), delta_fs.max()])
+    #     eod = runs.fetch['eod'].mean()
+    #     colors = ['gray', 'black']
+    #
+    #     for color_idx, delta_f in enumerate(sorted(delta_fs)):
+    #         hists = runs & dict(delta_f=delta_f)
+    #
+    #         for hist in hists.fetch.as_dict:
+    #             is_eod = hist['eod_coeff'] > 0
+    #
+    #             h = hist['histogram'].astype(float)
+    #             dt = hist['bin_width_radians']  # bin width in ms
+    #             h /= h.sum() * dt
+    #
+    #             t = (np.arange(len(h)) * dt + dt / 2)
+    #             ax[int(is_eod)].plot(t, h, color=colors[color_idx], lw=1, label=r'$\Delta f=%.0f$Hz' % delta_f)
+    #             ax[int(is_eod)].set_ylim((0,1))
+    #             ax[int(is_eod)].set_title(('EOD %.2fHz' % eod) if is_eod else 'Stimulus')
+    #             # ax[int(is_eod)].set_xticks(np.arange(0, 360, 45))
+    #
+    #             # ax[int(is_eod)].set_thetagrids(thetaticks, frac=1.3)
+    #
+    #         ax[0].legend(prop={'size':6})
+    #         ax[1].legend(prop={'size':6})
 
-                    h = hist['histogram'].astype(float)
-                    dt = hist['bin_width_radians']  # bin width in ms
-                    h /= h.sum() * dt
 
-                    t = (np.arange(len(h)) * dt + dt / 2)
-                    t = np.hstack((t, t[0]))
-                    h = np.hstack((h, h[0]))
-                    contrast = hist['contrast']
-                    ax[int(is_eod)].fill_between(t, 0 * h, h,
-                                                 color=colors[contrast], alpha=.2)
-                    ax[int(is_eod)].plot(t, h, color=colors[contrast], label='%.2f%%' % contrast, lw=1)
-                    thetaticks = np.arange(0, 360, 45)
-                    ax[int(is_eod)].set_thetagrids(thetaticks, frac=1.3)
+    def violin_plot(self, ax, restrictions):
+        runs = Runs() * self & restrictions
+        df = pd.concat([pd.DataFrame(item) for item in runs.fetch.as_dict()])
+        df.ix[df.stimulus_coeff == 1, 'type'] = 'stimulus'
+        df.ix[df.eod_coeff == 1, 'type'] = 'EOD'
+        delta_fs = np.unique(runs.fetch['delta_f'])
+        delta_fs.sort()
 
-                ax[1].legend(bbox_to_anchor=(2.0, 1.2))
-                ax[0].set_title('EOD %.2fHz' % eod, position=[.5, 1.2])
-                ax[1].set_title('Stimulus %.2fHz' % (eod + delta_f), position=[.5, 1.2])
-                ax[0].set_yticks([])
-                ax[1].set_yticks([])
-                fig.tight_layout()
-                fig.subplots_adjust(right=.75)
-                dir = figbase + '/%s' % (cell['cell_type'],)
-                mkdir(dir)
-                filename = dir + '/%s_df%.2f.pdf' % (cell['cell_id'],  delta_f)
-                fig.savefig(filename)
-                plt.close(fig)
+
+        sns.violinplot(data=df, x='delta_f', y='spikes', hue='type', split=True, ax=ax, hue_order=['EOD','stimulus'],
+                       order=delta_fs, palette="muted", cut=0, inner=None, linewidth=0)
+
+
 if __name__ == "__main__":
     # foss = FirstOrderSpikeSpectra()
     # foss.populate(reserve_jobs=True)

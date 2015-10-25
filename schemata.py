@@ -1,19 +1,18 @@
 import os
-from pprint import pprint
 import re
 import datajoint as dj
 from datajoint import schema
-import glob
 import sys
 import yaml
 
 BASEDIR = '/home/fabee/data/carolin/'
-server = schema('efish', locals())
+server = schema('efish_locking', locals())
 from pyrelacs.DataClasses import load
 import numpy as np
 from pint import UnitRegistry
 
 ureg = UnitRegistry()
+
 
 def peakdet(v, delta=None):
     sys.stdout.write('.')
@@ -24,13 +23,12 @@ def peakdet(v, delta=None):
     minidx = []
     v = np.asarray(v)
     if delta is None:
-        up = int(np.min([1e5,len(v)]))
+        up = int(np.min([1e5, len(v)]))
         tmp = np.abs(v[:up])
         delta = np.percentile(tmp, 99.9) - np.percentile(tmp, 50)
 
     if not np.isscalar(delta):
         sys.exit('Input argument delta must be a scalar')
-
 
     if delta <= 0:
         sys.exit('Input argument delta must be positive')
@@ -42,8 +40,8 @@ def peakdet(v, delta=None):
     n = len(v)
     for i in range(len(v)):
         # if i % 1e3 == 0:
-            # sys.stdout.write("\r\t\t%.2f%%" % (float(i)/float(n)*100.,))
-            # sys.stdout.write("\r%i/%i" % (i, n))
+        # sys.stdout.write("\r\t\t%.2f%%" % (float(i)/float(n)*100.,))
+        # sys.stdout.write("\r%i/%i" % (i, n))
         this = v[i]
         if this > mx:
             mx = this
@@ -209,8 +207,6 @@ class EFishes(dj.Imported):
         self.insert1(key)
 
 
-
-
 @server
 class Cells(dj.Imported):
     definition = """
@@ -277,6 +273,21 @@ class FICurves(dj.Imported):
 
                 self.insert1(row)
 
+    def plot(self, ax, restrictions):
+        rel = self & restrictions
+        contrast, f0, fs = (self & restrictions).fetch1['ir','f_0', 'f_s']
+        ax.plot(contrast, f0, '--k', label='onset response', dashes=(2,2))
+        ax.plot(contrast, fs, '-k', label='stationary response')
+        ax.set_xlabel('amplitude [mV/cm]')
+        ax.set_ylabel('firing rate [Hz]')
+        _, ymax = ax.get_ylim()
+        ax.set_ylim((0, 1.5 * ymax))
+        mi, ma = np.amin(contrast), np.amax(contrast)
+        ax.set_xticks(np.round([mi, (ma+mi)*.5, ma], decimals=1))
+
+
+
+
 
 @server
 class ISIHistograms(dj.Imported):
@@ -307,6 +318,13 @@ class ISIHistograms(dj.Imported):
                     row[name.lower()] = dat
 
                 self.insert1(row)
+
+    def plot(self, ax, restrictions):
+        eod_cycles, p = (ISIHistograms() & restrictions).fetch1['eod', 'p']
+        dt = eod_cycles[1]-eod_cycles[0]
+        ax.bar(eod_cycles, p, width=dt, color='k', lw=0)
+        ax.set_xlabel('EOD cycles')
+
 
 @server
 class Runs(dj.Imported):
@@ -412,7 +430,7 @@ class Runs(dj.Imported):
                     stim_k = stim_k[0]
                     stim_m = stim_m[0]
                     signal_column = \
-                    [i for i, k in enumerate(stim_k) if k[:4] == ('stimulus', 'GlobalEField', 'signal', '-')][0]
+                        [i for i, k in enumerate(stim_k) if k[:4] == ('stimulus', 'GlobalEField', 'signal', '-')][0]
 
                     valid = []
 
@@ -430,7 +448,7 @@ class Runs(dj.Imported):
                 if len(stim_d) != len(spi_d):
                     print(
                         """\t\t%s index %i has %i trials, but stimuli.dat has %i. Trial was probably aborted. Not including data.""" % (
-                        spikefile, spi_m['index'], len(spi_d), len(stim_d)))
+                            spikefile, spi_m['index'], len(spi_d), len(stim_d)))
                     continue
 
                 start_index, index = [(i, k[-1]) for i, k in enumerate(stim_k) if 'traces' in k and 'V-1' in k][0]
@@ -496,7 +514,6 @@ class Runs(dj.Imported):
                     spike_table.insert1(tmp, replace=True)
 
 
-
 @server
 class GlobalEFieldPeaksTroughs(dj.Computed):
     definition = """
@@ -511,12 +528,12 @@ class GlobalEFieldPeaksTroughs(dj.Computed):
     """
 
     def _make_tuples(self, key):
-
         dat = (Runs.GlobalEField() & key).fetch(as_dict=True)
         assert len(dat) == 1, 'key returned more than one element'
 
         _, key['peaks'], _, key['troughs'] = peakdet(dat[0]['global_efield'])
         self.insert1(key)
+
 
 @server
 class LocalEODPeaksTroughs(dj.Computed):
@@ -532,7 +549,6 @@ class LocalEODPeaksTroughs(dj.Computed):
     """
 
     def _make_tuples(self, key):
-
         dat = (Runs.LocalEOD() & key).fetch(as_dict=True)
         assert len(dat) == 1, 'key returned more than one element'
 
