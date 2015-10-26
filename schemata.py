@@ -275,18 +275,15 @@ class FICurves(dj.Imported):
 
     def plot(self, ax, restrictions):
         rel = self & restrictions
-        contrast, f0, fs = (self & restrictions).fetch1['ir','f_0', 'f_s']
-        ax.plot(contrast, f0, '--k', label='onset response', dashes=(2,2))
+        contrast, f0, fs = (self & restrictions).fetch1['ir', 'f_0', 'f_s']
+        ax.plot(contrast, f0, '--k', label='onset response', dashes=(2, 2))
         ax.plot(contrast, fs, '-k', label='stationary response')
         ax.set_xlabel('amplitude [mV/cm]')
         ax.set_ylabel('firing rate [Hz]')
         _, ymax = ax.get_ylim()
         ax.set_ylim((0, 1.5 * ymax))
         mi, ma = np.amin(contrast), np.amax(contrast)
-        ax.set_xticks(np.round([mi, (ma+mi)*.5, ma], decimals=1))
-
-
-
+        ax.set_xticks(np.round([mi, (ma + mi) * .5, ma], decimals=1))
 
 
 @server
@@ -321,7 +318,7 @@ class ISIHistograms(dj.Imported):
 
     def plot(self, ax, restrictions):
         eod_cycles, p = (ISIHistograms() & restrictions).fetch1['eod', 'p']
-        dt = eod_cycles[1]-eod_cycles[0]
+        dt = eod_cycles[1] - eod_cycles[0]
         ax.bar(eod_cycles, p, width=dt, color='k', lw=0)
         ax.set_xlabel('EOD cycles')
 
@@ -528,10 +525,9 @@ class GlobalEFieldPeaksTroughs(dj.Computed):
     """
 
     def _make_tuples(self, key):
-        dat = (Runs.GlobalEField() & key).fetch(as_dict=True)
-        assert len(dat) == 1, 'key returned more than one element'
+        dat = (Runs.GlobalEField() & key).fetch1()
 
-        _, key['peaks'], _, key['troughs'] = peakdet(dat[0]['global_efield'])
+        _, key['peaks'], _, key['troughs'] = peakdet(dat['global_efield'])
         self.insert1(key)
 
 
@@ -549,20 +545,18 @@ class LocalEODPeaksTroughs(dj.Computed):
     """
 
     def _make_tuples(self, key):
-        dat = (Runs.LocalEOD() & key).fetch(as_dict=True)
-        assert len(dat) == 1, 'key returned more than one element'
+        dat = (Runs.LocalEOD() & key).fetch1()
 
-        _, key['peaks'], _, key['troughs'] = peakdet(dat[0]['local_efield'])
+        _, key['peaks'], _, key['troughs'] = peakdet(dat['local_efield'])
         self.insert1(key)
 
 
 if __name__ == "__main__":
     pc = PaperCells()
-    # pc.make_tuples()
-    #
+
     ef = EFishes()
     ef.populate(reserve_jobs=True)
-    #
+
     cl = Cells()
     cl.populate(reserve_jobs=True)
 
