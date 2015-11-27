@@ -4,6 +4,7 @@ import datajoint as dj
 from datajoint import schema
 import sys
 import yaml
+import seaborn as sns
 
 BASEDIR = '/home/fabee/data/carolin/'
 server = schema('efish_locking', locals())
@@ -275,7 +276,10 @@ class FICurves(dj.Imported):
 
     def plot(self, ax, restrictions):
         rel = self & restrictions
-        contrast, f0, fs = (self & restrictions).fetch1['ir', 'f_0', 'f_s']
+        try:
+            contrast, f0, fs = (self & restrictions).fetch1['ir', 'f_0', 'f_s']
+        except dj.DataJointError:
+            return
         ax.plot(contrast, f0, '--k', label='onset response', dashes=(2, 2))
         ax.plot(contrast, fs, '-k', label='stationary response')
         ax.set_xlabel('amplitude [mV/cm]')
@@ -317,9 +321,12 @@ class ISIHistograms(dj.Imported):
                 self.insert1(row)
 
     def plot(self, ax, restrictions):
-        eod_cycles, p = (ISIHistograms() & restrictions).fetch1['eod', 'p']
+        try:
+            eod_cycles, p = (ISIHistograms() & restrictions).fetch1['eod', 'p']
+        except dj.DataJointError:
+            return
         dt = eod_cycles[1] - eod_cycles[0]
-        ax.bar(eod_cycles, p, width=dt, color='k', lw=0)
+        ax.bar(eod_cycles, p, width=dt, color=sns.xkcd_rgb['charcoal grey'], lw=0)
         ax.set_xlabel('EOD cycles')
 
 

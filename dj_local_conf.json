@@ -1,6 +1,6 @@
 {
     "display.limit": 7,
-    "loglevel": "DEBUG",
+    "loglevel": "ERROR",
     "connection.init_function": null,
     "safemode": true,
     "display.width": 14,

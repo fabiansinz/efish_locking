@@ -8,10 +8,10 @@ from figure_classes import Figure02
 from analyses import *
 
 
-def generate_filename(cell, contrast, base='firstorderspectra'):
-    dir = 'figures/%s/%s/' % (base, cell['cell_type'], )
+def generate_filename(cell, contrast):
+    dir = 'figures/figure02/%s/' % (cell['cell_type'], )
     mkdir(dir)
-    return dir + 'figure02_%s_contrast%.2f.pdf' % (cell['cell_id'], contrast)
+    return dir + '%s_contrast%.2f.png' % (cell['cell_id'], contrast)
 
 if __name__ == "__main__":
     f_max = 2000 # Hz
@@ -31,7 +31,7 @@ if __name__ == "__main__":
             target_trials = runs & cell & dict(contrast=contrast, am=0, n_harmonics=0)
 
             if target_trials:
-                with Figure02(filename=generate_filename(cell, contrast=contrast, base=base_name)) as (fig, ax):
+                with Figure02(filename=generate_filename(cell, contrast=contrast)) as (fig, ax):
                     # --- plot ISI histogram
                     EODStimulusPSTSpikes().plot(ax=ax['psth'], restrictions=target_trials)
 

@@ -18,13 +18,14 @@ if __name__ == "__main__":
     sos = SecondOrderSpikeSpectra()
 
     runs = Runs()
-    for cell in (Cells() & 'cell_id="2014-12-03-aj"').fetch.as_dict:
+    for cell in Cells().fetch.as_dict:
 
         unit = cell['cell_type']
         print('Processing', cell['cell_id'])
 
+        line_colors = sns.color_palette('pastel', n_colors=3)#sns.xkcd_rgb['golden yellow'], sns.xkcd_rgb['baby blue'], sns.xkcd_rgb['apple green']
         for spectrum, base_name in zip([fos, sos], ['firstorderspectra', 'secondorderspectra']):
-            for contrast in [20]:
+            for contrast in [5, 10, 20]:
                 print("contrast: %.2f%%" % (contrast,))
 
                 target_trials = ((spectrum & cell & ('contrast = %i' % (contrast,)) & 'am = 0' & 'n_harmonics = 0') * runs)
@@ -38,7 +39,7 @@ if __name__ == "__main__":
                         FICurves().plot(ax=ax['FI'], restrictions=cell)
 
                         # --- plot locking
-                        PhaseLockingHistogram().violin_plot(ax['violin'], restrictions=target_trials)
+                        PhaseLockingHistogram().violin_plot(ax['violin'], restrictions=target_trials, palette=line_colors)
 
                         # --- plot spectra
                         y = [0]
@@ -54,8 +55,7 @@ if __name__ == "__main__":
                             stim_freq.append(spec['eod'] + spec['delta_f'])
                             deltaf_freq.append(spec['delta_f'])
                             eod_freq.append(spec['eod'])
-                        line_colors = sns.xkcd_rgb['golden yellow'], sns.xkcd_rgb['baby blue'], sns.xkcd_rgb['apple green']
 
-                        ax['spectrum'].plot(stim_freq, y[:-1], '-', zorder=-1, lw=1, color=line_colors[0],label='stimulus')
-                        ax['spectrum'].plot(np.abs(deltaf_freq), y[:-1], '-',  zorder=-1, lw=1, color=line_colors[1], label=r'$|\Delta f|$')
-                        ax['spectrum'].plot(eod_freq, y[:-1], '-', zorder=-1, lw=1, color=line_colors[2], label='EOD')
+                        ax['spectrum'].plot(eod_freq, y[:-1], '-', zorder=-1, lw=1, color=line_colors[0], label='EOD')
+                        ax['spectrum'].plot(stim_freq, y[:-1], '-', zorder=-1, lw=1, color=line_colors[1],label='stimulus')
+                        ax['spectrum'].plot(np.abs(deltaf_freq), y[:-1], '-',  zorder=-1, lw=1, color=line_colors[2], label=r'$|\Delta f|$')
