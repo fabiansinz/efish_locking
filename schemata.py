@@ -445,14 +445,16 @@ class Baseline(dj.Imported):
                 to_insert['samplingrate'] = 1 / sample_interval * 1000 if time_unit == 'ms' else 1 / sample_interval
 
                 self.insert1(to_insert)
+
                 for trial_idx, (start, stop) in enumerate(zip(start_idx, stop_idx)):
-                    if start > 0:
-                        tmp = dict(key)
+                    if start < 0:
+                        print("Negative indices in stimuli.dat. Skipping local peak extraction!")
+                        tmp = dict(key, repeat=spi_m['index'])
                         leod = traces['LocalEOD-1']['data'][start:stop]
                         _, tmp['peaks'], _, tmp['troughs'] = peakdet(leod)
                         localeod.insert1(tmp, replace=True)
 
-                    spike_table.insert1(dict(key, times=spi_d), replace=True)
+                    spike_table.insert1(dict(key, times=spi_d, repeat=spi_m['index']), replace=True)
 
 @server
 class Runs(dj.Imported):
