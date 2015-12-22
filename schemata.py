@@ -447,12 +447,14 @@ class Baseline(dj.Imported):
                 self.insert1(to_insert)
 
                 for trial_idx, (start, stop) in enumerate(zip(start_idx, stop_idx)):
-                    if start < 0:
-                        print("Negative indices in stimuli.dat. Skipping local peak extraction!")
+                    if start > 0:
                         tmp = dict(key, repeat=spi_m['index'])
                         leod = traces['LocalEOD-1']['data'][start:stop]
                         _, tmp['peaks'], _, tmp['troughs'] = peakdet(leod)
                         localeod.insert1(tmp, replace=True)
+                    else:
+                        print("Negative indices in stimuli.dat. Skipping local peak extraction!")
+
 
                     spike_table.insert1(dict(key, times=spi_d, repeat=spi_m['index']), replace=True)
 
