@@ -329,6 +329,130 @@ class ISIHistograms(dj.Imported):
         ax.bar(eod_cycles, p, width=dt, color=sns.xkcd_rgb['charcoal grey'], lw=0)
         ax.set_xlabel('EOD cycles')
 
+@server
+class Baseline(dj.Imported):
+    definition = """
+    # table holding baseline recordings
+    ->Cells
+    repeat                     : int # index of the run
+
+    ---
+    eod                     : float # eod rate at trial in Hz
+    duration                : float # duration in s
+    samplingrate            : float # sampling rate in Hz
+
+    """
+
+    class SpikeTimes(dj.Part):
+        definition = """
+        # table holding spike time of trials
+
+        -> Baseline
+        ---
+
+        times                      : longblob # spikes times in ms
+        """
+
+    class LocalEODPeaksTroughs(dj.Part, dj.Manual):
+        definition = """
+        # table holding local EOD traces
+
+        -> Baseline
+        ---
+
+        peaks                      : longblob
+        troughs                      : longblob
+        """
+
+    def _make_tuples(self, key):
+        repro = 'BaselineActivity'
+        basedir = BASEDIR + key['cell_id']
+        spikefile = basedir + '/basespikes1.dat'
+        if os.path.isfile(spikefile):
+            stimuli = load(basedir + '/stimuli.dat')
+
+            traces = load_traces(basedir, stimuli)
+            spikes = load(spikefile)
+            spi_meta, spi_key, spi_data = spikes.selectall()
+
+            localeod = Baseline.LocalEODPeaksTroughs()
+            spike_table = Baseline.SpikeTimes()
+
+
+            for run_idx, (spi_d, spi_m) in enumerate(zip(spi_data, spi_meta)):
+                print("\t%s repeat %i" % (repro, run_idx))
+
+                # match index from stimspikes with run from stimuli.dat
+                stim_m, stim_k, stim_d = stimuli.subkey_select(RePro=repro, Run=spi_m['index'])
+
+
+                if len(stim_m) > 1:
+                    raise KeyError('%s and index are not unique to identify stimuli.dat block.' % (repro,))
+                else:
+                    stim_k = stim_k[0]
+                    stim_m = stim_m[0]
+                    signal_column = \
+                        [i for i, k in enumerate(stim_k) if k[:4] == ('stimulus', 'GlobalEField', 'signal', '-')][0]
+
+                    valid = []
+
+                    if stim_d == [[[0]]]:
+                        print("\t\tEmpty stimuli data! Continuing ...")
+                        continue
+
+
+                    for d in stim_d[0]:
+                        if not d[signal_column].startswith('FileStimulus-value'):
+                            valid.append(d)
+                        else:
+                            print("\t\tExcluding a reset trial from stimuli.dat")
+                    stim_d = valid
+
+                if len(stim_d) > 1:
+                    print(
+                        """\t\t%s index %i has more one trials. Not including data.""" % (
+                            spikefile, spi_m['index'], len(spi_d), len(stim_d)))
+                    continue
+
+                start_index, index = [(i, k[-1]) for i, k in enumerate(stim_k) if 'traces' in k and 'V-1' in k][0]
+                sample_interval, time_unit = get_number_and_unit(
+                    stim_m['analog input traces']['sample interval%i' % (index,)])
+
+                # make sure that everything was sampled with the same interval
+                sis = []
+                for jj in range(1, 5):
+                    si, tu = get_number_and_unit(stim_m['analog input traces']['sample interval%i' % (jj,)])
+                    assert tu == 'ms', 'Time unit is not ms anymore!'
+                    sis.append(si)
+                assert len(np.unique(sis)) == 1, 'Different sampling intervals!'
+
+                duration = ureg.parse_expression(spi_m['duration']).to(time_unit).magnitude
+
+
+
+                start_idx, stop_idx = [], []
+                # start_times, stop_times = [], []
+
+                start_indices = [d[start_index] for d in stim_d]
+                for begin_index, trial in zip(start_indices, spi_d):
+                    start_idx.append(begin_index)
+                    stop_idx.append(begin_index + duration / sample_interval)
+
+                to_insert = dict(key)
+                to_insert['repeat'] = spi_m['index']
+                to_insert['eod'] = float(spi_m['EOD rate'][:-2])
+                to_insert['duration'] = duration / 1000 if time_unit == 'ms' else duration
+                to_insert['samplingrate'] = 1 / sample_interval * 1000 if time_unit == 'ms' else 1 / sample_interval
+
+                self.insert1(to_insert)
+                for trial_idx, (start, stop) in enumerate(zip(start_idx, stop_idx)):
+                    if start > 0:
+                        tmp = dict(key)
+                        leod = traces['LocalEOD-1']['data'][start:stop]
+                        _, tmp['peaks'], _, tmp['troughs'] = peakdet(leod)
+                        localeod.insert1(tmp, replace=True)
+
+                    spike_table.insert1(dict(key, times=spi_d), replace=True)
 
 @server
 class Runs(dj.Imported):
@@ -581,3 +705,5 @@ if __name__ == "__main__":
 
     lpts = LocalEODPeaksTroughs()
     lpts.populate(reserve_jobs=True)
+
+    Baseline().populate()

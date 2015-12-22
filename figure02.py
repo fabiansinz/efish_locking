@@ -19,7 +19,7 @@ if __name__ == "__main__":
     sos = SecondOrderSpikeSpectra()
 
     runs = Runs()
-    for cell in (Cells() & 'cell_id="2014-12-03-ao"').fetch.as_dict:
+    for cell in (Cells() & dict(cell_type='p-unit')).fetch.as_dict: # & 'cell_id="2014-12-03-ao"'
 
         unit = cell['cell_type']
         print('Processing', cell['cell_id'])
