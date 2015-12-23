@@ -11,7 +11,7 @@ server = schema('efish_locking', locals())
 from pyrelacs.DataClasses import load
 import numpy as np
 from pint import UnitRegistry
-
+import pycircstat as circ
 ureg = UnitRegistry()
 
 
@@ -363,6 +363,21 @@ class Baseline(dj.Imported):
         peaks                      : longblob
         troughs                      : longblob
         """
+
+    def mean_var(self):
+        """
+        Computes the mean and variance of the baseline psth
+
+        :return: mean and variance
+        """
+        spikes = (Baseline.SpikeTimes() & self).fetch1['times']
+        eod = self.fetch1['eod']
+        period = 1/eod
+        factor = 2 * np.pi / period
+        t = (spikes % period)
+        mu = circ.mean(t * factor)/factor
+        sigma2 = circ.var(t * factor) / factor**2
+        return mu, sigma2
 
     def _make_tuples(self, key):
         repro = 'BaselineActivity'
