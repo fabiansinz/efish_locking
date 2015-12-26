@@ -90,6 +90,12 @@ def scan_info(cell_id):
 
 
 def get_number_and_unit(value_string):
+    """
+    Get the number and the unit from a string.
+
+    :param value_string:
+    :return:
+    """
     if value_string.endswith('%'):
         return (float(value_string.strip()[:-1]), '%')
     try:
@@ -386,15 +392,7 @@ class Baseline(dj.Imported):
         return mu, sigma2
 
     def plot_psth(self, ax, restrictions):
-        try:
-            spikes = (Baseline.SpikeTimes() & restrictions).fetch1['times'] / 1000 # convert to s
-        except:
-            #--------------------------
-            # TODO: remove this
-            from IPython import embed
-            embed()
-            exit()
-            #--------------------------
+        spikes = (Baseline.SpikeTimes() & restrictions).fetch1['times'] / 1000 # convert to s
 
         eod, sampling_rate = (self & restrictions).fetch1['eod', 'samplingrate']
         if (Baseline.LocalEODPeaksTroughs() & restrictions):
