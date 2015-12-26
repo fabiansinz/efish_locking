@@ -16,7 +16,15 @@ ureg = UnitRegistry()
 
 
 def peakdet(v, delta=None):
-    sys.stdout.write('.')
+    """
+    Peak detection. Modified version from https://gist.github.com/endolith/250860
+
+    A point counts as peak if it is maximal and is preceeded by a value lower by delta.
+
+    :param v: array of values
+    :param delta: threshold; set to 99.9%ile - median of v if None
+    :return: maxima, maximum indices, minima, minimum indices
+    """
     maxtab = []
     maxidx = []
 
@@ -40,9 +48,6 @@ def peakdet(v, delta=None):
     lookformax = True
     n = len(v)
     for i in range(len(v)):
-        # if i % 1e3 == 0:
-        # sys.stdout.write("\r\t\t%.2f%%" % (float(i)/float(n)*100.,))
-        # sys.stdout.write("\r%i/%i" % (i, n))
         this = v[i]
         if this > mx:
             mx = this
@@ -364,20 +369,49 @@ class Baseline(dj.Imported):
         troughs                      : longblob
         """
 
-    def mean_var(self):
+    def mean_var(self, restrictions):
         """
         Computes the mean and variance of the baseline psth
-
+        :param restrictions: restriction that identify one baseline trial
         :return: mean and variance
         """
-        spikes = (Baseline.SpikeTimes() & self).fetch1['times']
-        eod = self.fetch1['eod']
+        rel = self & restrictions
+        spikes = (Baseline.SpikeTimes() & rel).fetch1['times']
+        eod = rel.fetch1['eod']
         period = 1/eod
         factor = 2 * np.pi / period
         t = (spikes % period)
         mu = circ.mean(t * factor)/factor
         sigma2 = circ.var(t * factor) / factor**2
         return mu, sigma2
+
+    def plot_psth(self, ax, restrictions):
+        try:
+            spikes = (Baseline.SpikeTimes() & restrictions).fetch1['times'] / 1000 # convert to s
+        except:
+            #--------------------------
+            # TODO: remove this
+            from IPython import embed
+            embed()
+            exit()
+            #--------------------------
+
+        eod, sampling_rate = (self & restrictions).fetch1['eod', 'samplingrate']
+        if (Baseline.LocalEODPeaksTroughs() & restrictions):
+            spikes -= (Baseline.LocalEODPeaksTroughs() & restrictions).fetch1['peaks'][0] / sampling_rate
+
+        period = 1/eod
+        t = (spikes % period)
+        ax.hist(t, bins=50, color='silver', lw=0, normed=True)
+        ax.set_xlim((0,period))
+        ax.set_xlabel('EOD cycle',labelpad=-5)
+        ax.set_xticks([0,  period])
+        ax.set_xticklabels([0, 1])
+        ax.set_ylabel('PSTH')
+        ax.set_yticks([])
+
+
+
 
     def _make_tuples(self, key):
         repro = 'BaselineActivity'
