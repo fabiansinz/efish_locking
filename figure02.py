@@ -42,11 +42,11 @@ if __name__ == "__main__":
                     EODStimulusPSTSpikes().plot(ax=ax['psth'], restrictions=target_trials)
 
                     # --- plot baseline psths
-                    if (Baseline.SpikeTimes() & cell):
+                    if Baseline.SpikeTimes() & cell:
                         Baseline().plot_psth(ax['baseline'], cell)
 
                     # --- plot time cartoon psth baseline
-                    eod = (Baseline() & cell).fetch1['eod']
+                    eod = target_trials.fetch['eod'].mean()
                     stim_period = 1/(eod-delta_f)
                     var = (1/8/eod)**2
                     t = np.linspace(-N/eod,N/eod, 10000)

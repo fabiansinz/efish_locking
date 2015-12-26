@@ -93,8 +93,8 @@ def get_number_and_unit(value_string):
     """
     Get the number and the unit from a string.
 
-    :param value_string:
-    :return:
+    :param value_string: string with number and unit
+    :return: value, unit
     """
     if value_string.endswith('%'):
         return (float(value_string.strip()[:-1]), '%')
@@ -121,6 +121,13 @@ def get_number_and_unit(value_string):
 
 
 def load_traces(relacsdir, stimuli):
+    """
+    Loads trace files from relacs data directories,
+
+    :param relacsdir: directory where the traces are stored
+    :param stimuli: stimuli file object from pyrelacs
+    :return: dictionary with loaded traces
+    """
     meta, key, data = stimuli.selectall()
 
     ret = []
@@ -392,7 +399,7 @@ class Baseline(dj.Imported):
         return mu, sigma2
 
     def plot_psth(self, ax, restrictions):
-        spikes = (Baseline.SpikeTimes() & restrictions).fetch1['times'] / 1000 # convert to s
+        spikes = (Baseline.SpikeTimes() & restrictions & dict(repeat=0)).fetch1['times'] / 1000 # convert to s
 
         eod, sampling_rate = (self & restrictions).fetch1['eod', 'samplingrate']
         if (Baseline.LocalEODPeaksTroughs() & restrictions):
@@ -431,7 +438,6 @@ class Baseline(dj.Imported):
 
                 # match index from stimspikes with run from stimuli.dat
                 stim_m, stim_k, stim_d = stimuli.subkey_select(RePro=repro, Run=spi_m['index'])
-
 
                 if len(stim_m) > 1:
                     raise KeyError('%s and index are not unique to identify stimuli.dat block.' % (repro,))
