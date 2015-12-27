@@ -1,3 +1,6 @@
+from matplotlib import pyplot
+import numpy
+import seaborn
 from plot_settings import params as plot_params
 import matplotlib.pyplot as plt
 
@@ -5,12 +8,71 @@ from schemata import ISIHistograms, FICurves
 # mpl.use('Agg')      # With this line = figure disappears; without this line = warning
 
 from analyses import *
-from figure_classes import Figure01
+
 
 def generate_filename(cell, contrast, base='firstorderspectra'):
     dir = 'figures/%s/%s/' % (base, cell['cell_type'], )
     mkdir(dir)
     return dir + '%s_contrast%.2f.pdf' % (cell['cell_id'], contrast)
+
+
+class Figure01:
+
+    def __init__(self, filename=None):
+        self.filename = filename
+
+    def __enter__(self):
+        sns.set_style('ticks')
+        sns.set_context('paper')
+        with plt.rc_context(plot_params):
+            self.fig = plt.figure(figsize=(7,7))
+            gs = plt.GridSpec(3,3)
+            self.ax = {
+                'spectrum': self.fig.add_subplot(gs[1:,:-1]),
+                'ISI': self.fig.add_subplot(gs[0,0]),
+                'FI': self.fig.add_subplot(gs[0,1]),
+            }
+            self.ax['violin'] = self.fig.add_subplot(gs[:,-1])
+
+        return self.fig, self.ax
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+
+        fig, ax = self.fig, self.ax
+
+        # -- ISI
+        sns.despine(ax=ax['ISI'], left=True)
+        ax['ISI'].set_yticks([])
+        ax['ISI'].text(-0.01, 1.01, 'A', transform=ax['ISI'].transAxes, fontsize=10, fontweight='bold', va='top', ha='right')
+
+        # --- FI
+        sns.despine(ax=ax['FI'])
+        ax['FI'].text(-0.2, 1.01, 'B', transform=ax['FI'].transAxes, fontsize=10, fontweight='bold', va='top', ha='right')
+        ax['FI'].legend(loc='upper right')
+
+        # --- phase locking histograms
+        ax['violin'].set_xlim((0,2*np.pi))
+        ax['violin'].set_xticks(np.linspace(0,2*np.pi,5))
+        ax['violin'].set_xticklabels([r'$0$',r'$\frac{\pi}{2}$', r'$\pi$',r'$\frac{3\pi}{4}$', r'$2\pi$'])
+        ax['violin'].set_ylabel(r'$\Delta f$ [Hz]')
+        ax['violin'].set_xlabel('Phase')
+        ax['violin'].text(-0.15, 1.01, 'D', transform=ax['violin'].transAxes, fontsize=10, fontweight='bold', va='top', ha='right')
+        sns.despine(ax=ax['violin'], trim=True)
+
+        fig.tight_layout()
+        # -- spectrum
+        ax['spectrum'].set_xlim((0,2400))
+        ax['spectrum'].legend(bbox_to_anchor=(1.1, 1),  bbox_transform=ax['spectrum'].transAxes)
+        sns.despine(ax=ax['spectrum'], left=True, trim=True, offset=5)
+        ax['spectrum'].set_yticks([])
+        ax['spectrum'].set_xlabel('frequency [Hz]')
+        ax['spectrum'].text(-0.01, 1.01, 'C', transform=ax['spectrum'].transAxes, fontweight='bold', va='top', ha='right')
+        if self.filename is not None:
+            self.fig.savefig(self.filename)
+
+    def __call__(self, *args, **kwargs):
+        return self
+
 
 if __name__ == "__main__":
     f_max = 2000 # Hz

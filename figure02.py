@@ -1,10 +1,11 @@
 import os
+from matplotlib import pyplot
+import seaborn
 from datajoint.utils import user_choice
 from figure01 import generate_filename
 from plot_settings import params as plot_params
 import matplotlib.pyplot as plt
 from numpy.fft import fft, fftfreq, fftshift
-from figure_classes import Figure02
 from analyses import *
 from schemata import *
 
@@ -15,6 +16,80 @@ def generate_filename(cell, contrast):
 
 def gauss(t, m, v):
     return np.exp(-(t-m)**2/2/v)
+
+
+class Figure02:
+
+    def __init__(self, filename=None):
+        self.filename = filename
+
+    def __enter__(self):
+        sns.set_context('paper')
+        sns.set_style('ticks')
+        with plt.rc_context(plot_params):
+            self.fig = plt.figure(figsize=(7,7), dpi=400)
+            gs = plt.GridSpec(20,4)
+            self.ax = {
+                'baseline': self.fig.add_subplot(gs[:4,-1]),
+                'ispectrum': self.fig.add_subplot(gs[12:,:]),
+            }
+
+            with sns.axes_style('whitegrid'):
+                self.ax['period'] = self.fig.add_subplot(gs[4:8,-1], polar=True)
+            self.ax['psth'] = self.fig.add_subplot(gs[:8,:-1])
+
+            # self.ax['cartoon eod'] = self.fig.add_subplot(gs[8,:3])
+            self.ax['cartoon psth'] =  self.fig.add_subplot(gs[8:10,:3])
+            # self.ax['cartoon stim'] = self.fig.add_subplot(gs[10,:3])
+            self.ax['cartoon psth stim'] =  self.fig.add_subplot(gs[10:12,:3])
+
+            self.ax['spectrum base'] = self.fig.add_subplot(gs[8:10,3:])
+            self.ax['spectrum stim'] = self.fig.add_subplot(gs[10:12,3:])
+            self.gs = gs
+        return self.fig, self.ax
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+
+        fig, ax = self.fig, self.ax
+
+        # psth
+        sns.despine(ax=ax['psth'], left=True, trim=True)
+        # baseline
+        sns.despine(ax=ax['baseline'], left=True, trim=True)
+
+        # --- time
+        for k in ['cartoon psth', 'cartoon psth stim']:
+            sns.despine(ax=ax[k], left=True, trim=True)
+            ax[k].set_yticks([])
+
+        # --- spectrum
+        sns.despine(ax=ax['spectrum base'], left=True, trim=True)
+        ax['spectrum base'].set_yticks([])
+
+        sns.despine(ax=ax['spectrum stim'], left=True, trim=True)
+        ax['spectrum stim'].set_yticks([])
+
+        # ax['period'].set_thetagrids(np.arange(45, 360, 90), frac=1.3)
+
+        sns.despine(ax=ax['ispectrum'], trim=True)
+
+        ax['psth'].text(-0.1, 1, 'A', transform=ax['psth'].transAxes, fontweight='bold')
+        ax['baseline'].text(-0.1, 1, 'B', transform=ax['baseline'].transAxes, fontweight='bold')
+        ax['period'].text(-0.1, 1, 'C', transform=ax['period'].transAxes, fontweight='bold')
+        ax['cartoon psth'].text(-0.1, 1, 'D', transform=ax['cartoon psth'].transAxes, fontweight='bold')
+        ax['cartoon psth stim'].text(-0.1, 1, 'E', transform=ax['cartoon psth stim'].transAxes, fontweight='bold')
+        ax['ispectrum'].text(-0.1, 1, 'F', transform=ax['ispectrum'].transAxes, fontweight='bold')
+
+
+        # self.fig.subplots_adjust(left=0.1, right=0.95, bottom=0.05, top=0.95, hspace=1.6)
+        self.gs.tight_layout(self.fig)
+        if self.filename is not None:
+            self.fig.savefig(self.filename)
+        plt.close(self.fig)
+
+    def __call__(self, *args, **kwargs):
+        return self
+
 
 if __name__ == "__main__":
     f_max = 2000 # Hz
@@ -56,9 +131,10 @@ if __name__ == "__main__":
                     f_base = sum(gauss(t, mu, var) for mu in np.arange(-N/eod,N/eod,1/eod))
                     f_stim = sum(gauss(t, mu, var)*beat(mu) for mu in np.arange(-N/eod,N/eod,1/eod))
 
-                    ax['period'].fill_between(t/stim_period*2*np.pi, f_stim*0, f_stim,color='deeppink')
-                    ax['period'].fill_between(t/stim_period*2*np.pi, f_base*0, f_base,color='dodgerblue')
+                    ax['period'].fill_between(t/stim_period*2*np.pi, f_stim*0, f_stim,color='deeppink', label='EOD + stimulus')
+                    ax['period'].fill_between(t/stim_period*2*np.pi, f_base*0, f_base,color='dodgerblue', label='EOD only')
                     ax['period'].set_yticks([])
+                    ax['period'].legend()
 
                     ax['cartoon psth'].fill_between(t, 0*t, f_base, color='dodgerblue', lw=0)
                     ax['cartoon psth'].plot(t, base(t), '-k')
