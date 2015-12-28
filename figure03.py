@@ -17,8 +17,8 @@ sns.set_context('paper')
 with sns.axes_style('ticks'):
     fig,ax = plt.subplots(1,3, figsize=(7,3), dpi=400, sharey=True)
 
-ax[0].scatter( df.frequency, df.vector_strength, color='gray')
-ax[1].scatter( df.spread, df.vector_strength, color='gray')
+ax[0].scatter( df.frequency, df.vector_strength, color='gray', edgecolors='w',lw=.5)
+ax[1].scatter( df.spread, df.vector_strength, color='gray', edgecolors='w',lw=.5)
 ax[1].axis('tight')
 ax[1].set_xticks(ax[1].get_xticks()[::2])
 
@@ -42,6 +42,7 @@ ax[2].tick_params('y', length=0, width=0)
 ax[0].tick_params('y', length=3, width=1)
 for a in ax:
     a.tick_params('x', length=3, width=1)
+
 ax[0].set_ylim((0,1))
 ax[2].set_xlim((-0.5, 4.5))
 ax[0].set_xlim((0,2100))
@@ -54,6 +55,7 @@ ax[2].set_xlabel('contrast [%]')
 ax[0].text(-0.3, 1, 'A', transform=ax[0].transAxes, fontweight='bold')
 ax[1].text(-0.1, 1, 'B', transform=ax[1].transAxes, fontweight='bold')
 ax[2].text(-0.1, 1, 'C', transform=ax[2].transAxes, fontweight='bold')
+
 
 fig.tight_layout()
 fig.savefig('figures/figure03.pdf')
