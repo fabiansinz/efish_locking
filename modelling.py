@@ -238,6 +238,27 @@ class EODFit(dj.Computed):
 
         return ret_func
 
+@schema
+class LIFPUnit(dj.Lookup):
+    definition = """
+    # parameters for a LIF P-Unit simulation
 
+    id           : varchar(100) # non-double unique identifier
+    ---
+    zeta            : double
+    eod             : double    # EOD frequency
+    resonant_freq   : double    # resonant frequency of the osciallator
+    tau             : double
+    gain            : double
+    offset          : double
+    noise_sd        : double
+    threshold       : double
+    reset           : double
+    lif_tau         : double
+    """
+
+    contents = [
+        # TODO insert data from NWG poster here
+    ]
 if __name__ == '__main__':
     EODFit().populate(reserve_jobs=True)
