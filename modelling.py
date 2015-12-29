@@ -1,4 +1,5 @@
 import pandas as pd
+from scipy.integrate import odeint
 import datajoint as dj
 from datajoint import schema
 import numpy as np
@@ -238,6 +239,9 @@ class EODFit(dj.Computed):
 
         return ret_func
 
+
+
+
 @schema
 class LIFPUnit(dj.Lookup):
     definition = """
@@ -246,8 +250,7 @@ class LIFPUnit(dj.Lookup):
     id           : varchar(100) # non-double unique identifier
     ---
     zeta            : double
-    eod             : double    # EOD frequency
-    resonant_freq   : double    # resonant frequency of the osciallator
+    wr              : double    # resonant frequency of the osciallator
     tau             : double
     gain            : double
     offset          : double
@@ -258,7 +261,77 @@ class LIFPUnit(dj.Lookup):
     """
 
     contents = [
-        # TODO insert data from NWG poster here
+        dict(id = 'nwg2015',
+             tau = 0.002,
+             zeta = 0.2,
+             wr = 4082.6415251329345,
+             noise_sd = 100,
+             threshold = 10,
+             reset = 0,
+             liftau = 0.001,
+             offset = 17,
+             gain = 80)
     ]
+
+    def __call__(self, t, y0=None):
+        if y0 is None:
+            y0 = np.zeros(3)
+        return odeint(lambda y, tt: self._d(y, tt), y0, t).T[2]
+
+
+    def simulate(self, settings_name, n, t, s, y0=None):
+        """
+        Samples spikes from leaky integrate and fire neuron with id==settings_name and time t.
+        Returns n trials
+
+        :param settings_name: id of the settings tuple
+        :param n: number of trials
+        :param t: time array
+        :param s: stimulus as a function of time (function handle)
+        :return: spike times
+        """
+
+        # --- get parameters from database
+        zeta, tau, gain, wr, lif_tau = (self & dict(id=settings_name)).fetch1['zeta', 'tau', 'gain','wr','lif_tau']
+        w0 = wr / np.sqrt(1 - 2 * zeta ** 2)
+        Zm = np.sqrt((2 * w0 * zeta) ** 2 + (wr ** 2 - w0 ** 2) ** 2 / wr ** 2)
+        alpha = wr * Zm
+
+        # --- set initial values if not given
+        if y0 is None:
+            y0 = np.zeros(3)
+
+        # --- differential equations for resonantor
+        def _d(y, t):
+            return np.array([
+                y[1],
+                s(t) - 2 * zeta * w0 * y[1] - w0**2 * y[0],
+                (-y[2] + gain * alpha * max(y[0], 0)) / tau
+            ])
+
+
+        # --- simulate LIF
+        dt = t[1]-t[0]
+
+        Vin = odeint(lambda y, tt: _d(y, tt), y0, t).T[2]
+        Vin -= self.offset
+
+        Vout = np.zeros(n)
+        out = np.zeros((n,len(t)))
+
+        ret = [list() for _ in range(n)]
+
+        sdB = np.sqrt(dt)*self.noisesd
+
+        for i, T in enumerate(t):
+            Vout += (-Vout + Vin[i])*dt/lif_tau + np.random.randn(n)*sdB
+            idx = Vout > self.thres
+            for j in np.where(idx)[0]:
+                ret[j].append(T)
+            Vout[idx] = self.reset
+            out[:,i] = Vout
+
+        return out, tuple(np.asarray(e) for e in ret)
+
 if __name__ == '__main__':
     EODFit().populate(reserve_jobs=True)
