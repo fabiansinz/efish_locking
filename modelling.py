@@ -240,17 +240,17 @@ class EODFit(dj.Computed):
         return ret_func
 
 
-
-
 @schema
-class LIFPUnit(dj.Lookup):
+@gitlog
+class LIFPUnit(dj.Computed):
     definition = """
     # parameters for a LIF P-Unit simulation
 
     id           : varchar(100) # non-double unique identifier
+    ->EODFit
     ---
     zeta            : double
-    wr              : double    # resonant frequency of the osciallator
+    resonant_freq   : double    # resonant frequency of the osciallator in Hz
     tau             : double
     gain            : double
     offset          : double
@@ -260,24 +260,18 @@ class LIFPUnit(dj.Lookup):
     lif_tau         : double
     """
 
-    contents = [
-        dict(id = 'nwg2015',
-             tau = 0.002,
-             zeta = 0.2,
-             wr = 4082.6415251329345,
-             noise_sd = 100,
-             threshold = 10,
-             reset = 0,
-             liftau = 0.001,
-             offset = 17,
-             gain = 80)
-    ]
-
-    def __call__(self, t, y0=None):
-        if y0 is None:
-            y0 = np.zeros(3)
-        return odeint(lambda y, tt: self._d(y, tt), y0, t).T[2]
-
+    def _make_tuples(self, key):
+        eod = (EODFit() & key).fetch1['fundamental']
+        self.insert1(dict(key, id='nwg2015',
+                          tau=0.002,
+                          zeta=0.2,
+                          resonant_freq=eod,
+                          noise_sd=115,
+                          threshold=10,
+                          reset=0,
+                          lif_tau=0.001,
+                          offset=17,
+                          gain=70))
 
     def simulate(self, settings_name, n, t, s, y0=None):
         """
@@ -292,7 +286,9 @@ class LIFPUnit(dj.Lookup):
         """
 
         # --- get parameters from database
-        zeta, tau, gain, wr, lif_tau = (self & dict(id=settings_name)).fetch1['zeta', 'tau', 'gain','wr','lif_tau']
+        zeta, tau, gain, wr, lif_tau = (self & dict(id=settings_name)).fetch1[
+            'zeta', 'tau', 'gain', 'resonant_freq', 'lif_tau']
+        wr *= 2 * np.pi
         w0 = wr / np.sqrt(1 - 2 * zeta ** 2)
         Zm = np.sqrt((2 * w0 * zeta) ** 2 + (wr ** 2 - w0 ** 2) ** 2 / wr ** 2)
         alpha = wr * Zm
@@ -305,33 +301,53 @@ class LIFPUnit(dj.Lookup):
         def _d(y, t):
             return np.array([
                 y[1],
-                s(t) - 2 * zeta * w0 * y[1] - w0**2 * y[0],
+                s(t) - 2 * zeta * w0 * y[1] - w0 ** 2 * y[0],
                 (-y[2] + gain * alpha * max(y[0], 0)) / tau
             ])
 
-
         # --- simulate LIF
-        dt = t[1]-t[0]
+        dt = t[1] - t[0]
 
         Vin = odeint(lambda y, tt: _d(y, tt), y0, t).T[2]
         Vin -= self.offset
 
         Vout = np.zeros(n)
-        out = np.zeros((n,len(t)))
+        out = np.zeros((n, len(t)))
 
         ret = [list() for _ in range(n)]
 
-        sdB = np.sqrt(dt)*self.noisesd
+        sdB = np.sqrt(dt) * self.noisesd
 
         for i, T in enumerate(t):
-            Vout += (-Vout + Vin[i])*dt/lif_tau + np.random.randn(n)*sdB
+            Vout += (-Vout + Vin[i]) * dt / lif_tau + np.random.randn(n) * sdB
             idx = Vout > self.thres
             for j in np.where(idx)[0]:
                 ret[j].append(T)
             Vout[idx] = self.reset
-            out[:,i] = Vout
+            out[:, i] = Vout
 
         return out, tuple(np.asarray(e) for e in ret)
 
+
+@schema
+@gitlog
+class PUnitSimulations(dj.Computed):
+    definition = """
+    # LIF simulations
+
+    ->LIFPUnit
+    ->EODFit
+    ---
+    """
+
+    @property
+    def populated_from(self):
+        return LIFPUnit() * EODFit() & 'ABS(fundamental-resonant_freq)<0.1'
+
+    def _make_tuples(self, key):
+        pass
+
+
 if __name__ == '__main__':
     EODFit().populate(reserve_jobs=True)
+    LIFPUnit().populate(reserve_jobs=True)
