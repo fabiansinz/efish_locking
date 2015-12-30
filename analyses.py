@@ -86,30 +86,47 @@ def compute_2nd_order_spectrum(spikes, t, sampling_rate, alpha=0.001, method='po
     return freqs, m_ampl, y
 
 
-def neg_vs_at(f, spikes):
+def _neg_vs_at(f, spikes):
     return -np.mean([1 - circ.var((trial % (1. / f)) * f * 2 * np.pi) for trial in spikes])
 
 
-def find_best_locking(spikes, fundamentals, tol=1):
+def find_best_locking(spikes, f0, tol=3):
+    """
+    Locally searches for a maximum in vector strength for a collection of spikes.
+
+    The vector strength is locally maximized with fminbound within f0+-tol. There are two exceptions
+    to the search range:
+
+    * if two initial guesses are closer then tol, then their mean is taken as search boundary
+    * if all initial guesses are negative or positive, the search intervals are chosen such that the result is
+      again negative or positive, respectively.
+
+    :param spikes: array of spike times or list thereof
+    :param f0: list of initial guesses
+    :param tol: search range is +-tol in Hz
+    :return: best locking frequencies, corresponding vector strength
+    """
     max_w, max_v = [], []
     if type(spikes) is not list:
         spikes = [spikes]
 
     # at an initial and end value to fundamental to generate the search intervals
-    fundamentals = np.array(fundamentals)
-    fundamentals.sort()
-    if fundamentals[0] > 0:
-        fundamentals = np.hstack((max(fundamentals[0] - tol, 0), fundamentals, fundamentals[-1] + tol))
-    elif fundamentals[-1] < 0:
-        fundamentals = np.hstack((fundamentals[0] - tol, fundamentals, min(fundamentals[-1] + tol, 0)))
-    else:
-        fundamentals = np.hstack((fundamentals[0] - tol, fundamentals, fundamentals[-1] + tol))
+    f0 = np.array(f0)
+    f0.sort()
 
-    for freq_before, freq, freq_after in zip(fundamentals[:-2], fundamentals[1:-1], fundamentals[2:]):
-        # search in freq +- tol unless we get too close to another fundamental. In that case, use the mid-interval
-        upper = min(freq + tol, freq_after)
-        lower = max(freq - tol, freq_before)
-        obj = functools.partial(neg_vs_at, spikes=spikes)
+    # --- make sure that fundamentals + boundaries stay negative positive if they were before
+    if f0[0] > 0:
+        f0 = np.hstack((max(f0[0] - tol, 0), f0, f0[-1] + tol))
+    elif f0[-1] < 0:
+        f0 = np.hstack((f0[0] - tol, f0, min(f0[-1] + tol, 0)))
+    else:
+        f0 = np.hstack((f0[0] - tol, f0, f0[-1] + tol))
+
+    for freq_before, freq, freq_after in zip(f0[:-2], f0[1:-1], f0[2:]):
+        # search in freq +- tol unless we get too close to another fundamental.
+        upper = min(freq + tol, (freq + freq_after) / 2)
+        lower = max(freq - tol, (freq_before + freq) / 2)
+        obj = functools.partial(_neg_vs_at, spikes=spikes)
         f_opt = optimize.fminbound(obj, lower, upper)
         max_w.append(f_opt)
         max_v.append(-obj(f_opt))
@@ -117,7 +134,8 @@ def find_best_locking(spikes, fundamentals, tol=1):
     return np.array(max_w), np.array(max_v)
 
 
-def find_significant_peaks(spikes, w, spectrum, peak_dict, threshold, tol=2., upper_cutoff=2000):
+def find_significant_peaks(spikes, w, spectrum, peak_dict, threshold, tol=3.,
+                           upper_cutoff=2000):  # check that search intervals work
     if not threshold > 0:
         print("Threshold value %.4f is not allowed" % threshold)
         return []
@@ -133,8 +151,6 @@ def find_significant_peaks(spikes, w, spectrum, peak_dict, threshold, tol=2., up
         return []
     max_w = max_w[idx]
     max_vs = max_vs[idx]
-
-
 
     # refine the found maxima
     max_w_ref, max_vs_ref = find_best_locking(spikes, max_w, tol=tol)
@@ -181,13 +197,13 @@ def find_significant_peaks(spikes, w, spectrum, peak_dict, threshold, tol=2., up
 
 
 class PlotableSpectrum:
-    def plot(self, figbase='figures', f_max=2000, **restrictions):
+    def plot(self, ax, restrictions, f_max=2000):
         sns.set_context('paper')
-        colors = ['#1b9e77', '#d95f02', '#7570b3', '#e7298a']
+        # colors = ['#1b9e77', '#d95f02', '#7570b3', '#e7298a']
+        colors = ['deeppink', 'dodgerblue', '#7570b3', 'black']
 
         stim, eod, baseline, beat = sympy.symbols('f_s, f_e, f_b, \Delta')
 
-        restrictions = dict(**restrictions)
         for fos in ((self * Runs()).project() & restrictions).fetch.as_dict:
             print("Processing %(cell_id)s %(run_id)i" % fos)
 
@@ -201,21 +217,12 @@ class PlotableSpectrum:
             f, v, alpha, cell, run = (self & fos).fetch1['frequencies', 'vector_strengths', 'critical_value',
                                                          'cell_id', 'run_id']
 
-            contrast, delta_f = (Runs() & fos).fetch1['contrast', 'delta_f']
-
-            cell_type = (Cells() & fos).fetch1['cell_type']
-
-
             # insert refined vector strengths
             peak_f, peak_v = peaks.fetch['frequency', 'vector_strength']
             f = np.hstack((f, peak_f))
             v = np.hstack((v, peak_v))
             idx = np.argsort(f)
             f, v = f[idx], v[idx]
-
-            # generate figure
-            with sns.axes_style('ticks'):
-                fig, ax = plt.subplots(figsize=(7.9, 3.93))
 
             # only take frequencies within defined ange
             idx = (f >= 0) & (f <= f_max) & ~np.isnan(v)
@@ -224,7 +231,7 @@ class PlotableSpectrum:
 
             ax.set_xlabel('frequency [Hz]')
             ax.set_ylabel('vector strength')
-            ax.set_ylim((0, 1.))
+            ax.set_ylim((0, 1.3))
             ax.set_xlim((0, f_max))
             ax.set_yticks([0, .25, .5, .75, 1.0])
 
@@ -259,17 +266,10 @@ class PlotableSpectrum:
                     ax.text(freq, vs + .05, r'$%s=%.1f$Hz' % (term, freq), fontsize=5, rotation=80,
                             ha='left',
                             va='bottom')
-            sns.despine(fig)
             handles, labels = ax.get_legend_handles_labels()
             by_label = OrderedDict(zip(labels, handles))
             ax.legend(by_label.values(), by_label.keys())
-            fig.tight_layout()
 
-            dir = figbase + '/%s' % (cell_type,)
-            mkdir(dir)
-            filename = dir + '/%s_%.2f%%_df%.2f_run%02i.pdf' % (cell, contrast, delta_f, run)
-            fig.savefig(filename)
-            plt.close(fig)
 
 
 @server
@@ -305,6 +305,36 @@ class FirstOrderSpikeSpectra(dj.Computed, PlotableSpectrum):
         vs[np.isnan(vs)] = 0
         self.insert1(key)
 
+
+@server
+class SpikeJitter(dj.Computed):
+    definition = """
+    # circular variance and mean of spike times within an EOD period
+
+    -> Runs
+
+    ---
+
+    var         : double # circular variance
+    mean        : double # circular mean
+    """
+
+    @property
+    def populated_from(self):
+        return Runs() & GlobalEFieldPeaksTroughs() & dict(cell_type='p-unit')
+
+    def _make_tuples(self, key):
+        print('Processing', key['cell_id'], 'run', key['run_id'], )
+        dt = 1. / (Runs() & key).fetch1['samplingrate']
+        eod = (Runs() & key).fetch1['eod']
+        trials = ((GlobalEFieldPeaksTroughs() * Runs.SpikeTimes()) & key)
+
+        aggregated_spikes = np.hstack([s / 1000 - p[0] * dt for s, p in zip(*trials.fetch['times', 'peaks'])])
+
+        aggregated_spikes %= 1/eod
+        aggregated_spikes *= eod * 2*np.pi # normalize to 2*pi
+        key['var'], key['mean'] = circ.var(aggregated_spikes), circ.mean(aggregated_spikes)
+        self.insert1(key)
 
 @server
 class SecondOrderSpikeSpectra(dj.Computed, PlotableSpectrum):
@@ -378,6 +408,7 @@ class FirstOrderSignificantPeaks(dj.Computed):
                 s['refined'] = double_peaks
                 self.insert1(s)
                 double_peaks -= 1
+
 
 
 @server
@@ -476,7 +507,7 @@ class PhaseLockingHistogram(dj.Computed):
 
         if key['eod_coeff'] > 0:
             # convert spikes to s and center on first peak of eod
-            times, peaks =(Runs.SpikeTimes() * LocalEODPeaksTroughs() & key).fetch['times', 'peaks']
+            times, peaks = (Runs.SpikeTimes() * LocalEODPeaksTroughs() & key).fetch['times', 'peaks']
 
             spikes = np.hstack([s / 1000 - p[0] / samplingrate for s, p in zip(times, peaks)])
         else:
@@ -484,13 +515,13 @@ class PhaseLockingHistogram(dj.Computed):
             times, peaks = (Runs.SpikeTimes() * GlobalEFieldPeaksTroughs() & key).fetch['times', 'peaks']
             spikes = np.hstack([s / 1000 - p[0] / samplingrate for s, p in zip(times, peaks)])
 
-        key['peak_frequency'] = samplingrate/np.mean([np.diff(p).mean() for p in peaks])
+        key['peak_frequency'] = samplingrate / np.mean([np.diff(p).mean() for p in peaks])
         key['locking_frequency'] = locking_frequency
 
         cycle = 1 / locking_frequency
         spikes %= cycle
 
-        key['spikes'] = spikes/cycle*2*np.pi
+        key['spikes'] = spikes / cycle * 2 * np.pi
         key['vector_strength'] = 1 - circ.var(key['spikes'])
 
         self.insert1(key)
@@ -508,31 +539,154 @@ class PhaseLockingHistogram(dj.Computed):
 
             histograms.insert1(key_sub)
 
-    def violin_plot(self, ax, restrictions):
+    def violin_plot(self, ax, restrictions, palette):
         runs = Runs() * self & restrictions
+        if len(runs) == 0:
+            return
+
         df = pd.concat([pd.DataFrame(item) for item in runs.fetch.as_dict()])
         df.ix[df.stimulus_coeff == 1, 'type'] = 'stimulus'
         df.ix[df.eod_coeff == 1, 'type'] = 'EOD'
         delta_fs = np.unique(runs.fetch['delta_f'])
-        delta_fs.sort()
+        delta_fs = delta_fs[np.argsort(-delta_fs)]
+
+        sns.violinplot(data=df, y='delta_f', x='spikes', hue='type', split=True, ax=ax, hue_order=['EOD', 'stimulus'],
+                       order=delta_fs, palette=palette, cut=0, inner=None, linewidth=.5,
+                       orient='h', bw=.05)
 
 
-        sns.violinplot(data=df, x='delta_f', y='spikes', hue='type', split=True, ax=ax, hue_order=['EOD','stimulus'],
-                       order=delta_fs, palette="muted", cut=0, inner=None, linewidth=0)
+@server
+class CoincidenceTolerance(dj.Lookup):
+    definition = """
+    # Coincidence tolerance of EOD and stimulus phase in s
+
+    coincidence_idx         : int
+    ---
+    tol                     : double
+    """
+
+    contents = [(0, 0.0001), ]
+
+
+@server
+class EODStimulusPSTSpikes(dj.Computed):
+    definition = """
+    # PSTH of Stimulus and EOD at the difference frequency of both
+
+    -> FirstOrderSignificantPeaks
+    -> CoincidenceTolerance
+    cycle_idx                : int  # index of the cycle
+    ---
+    stimulus_frequency       : double
+    eod_frequency            : double
+    window_half_size         : double # spikes will be extracted around +- this size around in phase points of stimulus and eod
+    vector_strength_eod      : double
+    vector_strength_stimulus : double
+    spikes                   : longblob
+    """
+
+    @property
+    def populated_from(self):
+        constr = dict(stimulus_coeff=1, baseline_coeff=0, eod_coeff=0, refined=1)
+        cell_type = Cells() & dict(cell_type='p-unit')
+        return FirstOrderSignificantPeaks() & cell_type & constr
+
+    def _make_tuples(self, key):
+        # key_sub = dict(key)
+        delta_f, eod, samplingrate = (Runs() & key).fetch1['delta_f', 'eod', 'samplingrate']
+        runs_stim = Runs() * FirstOrderSignificantPeaks() & key
+        runs_eod = Runs() * FirstOrderSignificantPeaks() & dict(key, stimulus_coeff=0, eod_coeff=1)
+
+        if len(runs_eod) > 0:
+            # duration = runs_eod.fetch1['duration']
+            tol = (CoincidenceTolerance() & key).fetch1['tol']
+            eod_period = 1 / runs_eod.fetch1['frequency']
+
+            whs = 10 * eod_period
+            times, peaks, epeaks = (Runs.SpikeTimes() * LocalEODPeaksTroughs() \
+                                    * GlobalEFieldPeaksTroughs().project(epeaks='peaks') \
+                                    & key).fetch['times', 'peaks', 'epeaks']
+
+            p0 = [peaks[i][
+                      np.abs(epeaks[i][:, None] - peaks[i][None, :]).min(axis=0) <= tol * samplingrate] / samplingrate
+                  for i in range(len(peaks))]
+
+            spikes = []
+
+            for train, in_phase in zip(times, p0):
+                train /= 1000  # convert to seconds
+                for phase in in_phase:
+                    chunk = train[(train >= phase - whs) & (train <= phase + whs)] - phase
+                    if len(chunk) > 0:
+                        spikes.append(chunk)
+
+            key['eod_frequency'] = runs_eod.fetch1['frequency']
+            key['vector_strength_eod'] = runs_eod.fetch1['vector_strength']
+            key['stimulus_frequency'] = runs_stim.fetch1['frequency']
+            key['vector_strength_stimulus'] = runs_stim.fetch1['vector_strength']
+            key['window_half_size'] = whs
+
+            for cycle_idx, train in enumerate(spikes):
+                key['spikes'] = train
+                key['cycle_idx'] = cycle_idx
+                self.insert1(key)
+
+    def plot(self, ax, restrictions, coincidence=0.0001):
+        rel = self * CoincidenceTolerance() * Runs().project('delta_f') & restrictions & dict(tol=coincidence)
+        df = pd.DataFrame(rel.fetch())
+        df['adelta_f'] = np.abs(df.delta_f)
+        df['sdelta_f'] = np.sign(df.delta_f)
+        df.sort(['adelta_f', 'sdelta_f'], inplace=True)
+
+        if len(df) > 0:
+            whs = df.window_half_size.mean()
+            # eod = df.eod_frequency.mean()
+            y = []
+            yticks = []
+            old = np.Inf
+            for i, (sp, del_f) in enumerate(zip(df.spikes, df.delta_f)):
+                if del_f != old:
+                    y.append(i)
+                    old = del_f
+                    yticks.append(del_f)
+                ax.plot(sp, 0 * sp + i, '.k', mfc='k', ms=.5, zorder=-10, rasterized=False)
+            y.append(i)
+            y = np.asarray(y)
+
+            ax.set_xlim((-whs, whs))
+            ax.set_xticks([-whs, -whs/2, 0, whs/2, whs])
+
+            # ax.set_xticklabels(['-10 EOD', '0', '10 EOD'])
+            ax.set_xticklabels([-10, -5, 0, 5, 10])
+            # ax.set_xlabel('EOD cycles')
+            ax.set_ylabel(r'$\Delta f$')
+            ax.tick_params(axis='y', length=0, width=0, which='major')
+
+            for y_from, y_to in zip(y[::2], y[1::2]):
+                ax.fill_between([-whs, whs], [y_from, y_from],[y_to, y_to], color='gainsboro', zorder=-20)
+            ax.set_yticks(0.5 * (y[1:] +y[:-1]))
+            ax.set_yticklabels(yticks)
+            ax.set_ylim(y[[0, -1]])
 
 
 if __name__ == "__main__":
+    import time
+
+    # time.sleep(np.random.rand() * 10)
     # foss = FirstOrderSpikeSpectra()
     # foss.populate(reserve_jobs=True)
     #
     # soss = SecondOrderSpikeSpectra()
-    # soss.populate()
-
+    # soss.populate(reserve_jobs=True)
+    #
     # fosp = FirstOrderSignificantPeaks()
-    # fosp.populate()
+    # fosp.populate(reserve_jobs=True)
     #
     # sosp = SecondOrderSignificantPeaks()
-    # sosp.populate()
+    # sosp.populate(reserve_jobs=True)
+    #
+    # plh = PhaseLockingHistogram()
+    # plh.populate(reserve_jobs=True)
 
-    plh = PhaseLockingHistogram()
-    plh.populate()
+    # EODStimulusPSTSpikes().populate(reserve_jobs=True)
+    SpikeJitter().populate(reserve_jobs=True)
