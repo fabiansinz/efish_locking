@@ -273,12 +273,12 @@ class LIFPUnit(dj.Computed):
                           offset=17,
                           gain=70))
 
-    def simulate(self, settings_name, n, t, s, y0=None):
+    def simulate(self, key, n, t, s, y0=None):
         """
         Samples spikes from leaky integrate and fire neuron with id==settings_name and time t.
         Returns n trials
 
-        :param settings_name: id of the settings tuple
+        :param key: key that uniquely identifies a setting
         :param n: number of trials
         :param t: time array
         :param s: stimulus as a function of time (function handle)
@@ -286,8 +286,8 @@ class LIFPUnit(dj.Computed):
         """
 
         # --- get parameters from database
-        zeta, tau, gain, wr, lif_tau = (self & dict(id=settings_name)).fetch1[
-            'zeta', 'tau', 'gain', 'resonant_freq', 'lif_tau']
+        zeta, tau, gain, wr, lif_tau, offset, threshold, reset, noisesd = (self & key).fetch1[
+            'zeta', 'tau', 'gain', 'resonant_freq', 'lif_tau', 'offset', 'threshold', 'reset', 'noise_sd']
         wr *= 2 * np.pi
         w0 = wr / np.sqrt(1 - 2 * zeta ** 2)
         Zm = np.sqrt((2 * w0 * zeta) ** 2 + (wr ** 2 - w0 ** 2) ** 2 / wr ** 2)
@@ -309,24 +309,22 @@ class LIFPUnit(dj.Computed):
         dt = t[1] - t[0]
 
         Vin = odeint(lambda y, tt: _d(y, tt), y0, t).T[2]
-        Vin -= self.offset
+        Vin -= offset
 
         Vout = np.zeros(n)
-        out = np.zeros((n, len(t)))
 
         ret = [list() for _ in range(n)]
 
-        sdB = np.sqrt(dt) * self.noisesd
+        sdB = np.sqrt(dt) * noisesd
 
         for i, T in enumerate(t):
             Vout += (-Vout + Vin[i]) * dt / lif_tau + np.random.randn(n) * sdB
-            idx = Vout > self.thres
+            idx = Vout > threshold
             for j in np.where(idx)[0]:
                 ret[j].append(T)
-            Vout[idx] = self.reset
-            out[:, i] = Vout
+            Vout[idx] = reset
 
-        return out, tuple(np.asarray(e) for e in ret)
+        return tuple(np.asarray(e) for e in ret), Vin
 
 
 @schema
@@ -354,15 +352,103 @@ class PUnitSimulations(dj.Computed):
     ->LIFPUnit
     ->ForeignEODDelta
     ---
-    dt=0.00005      : double
-
+    dt              : double # time resolution for differential equation
+    duration        : double # duration of trial in seconds
     """
 
-
     def _make_tuples(self, key):
-        pass
+
+        dt, duration = 0.00005, 2
+        trials = 50
+        ikey = dict(key)
+        ikey['dt'] = dt
+        ikey['duration'] = duration
+
+        eod = (EODFit() & key).fetch1['fundamental']
+        delta_eod = (ForeignEODDelta() & key).fetch1['delta_eod']
+        other_eod = eod + delta_eod
+
+        t = np.arange(0,duration,dt)
+
+
+        baseline = EODFit().eod_func(key)
+        bl = baseline(t)
+        fac = (bl.max()-bl.min())*0.2
+        stimulus = lambda tt: baseline(tt) + fac*np.sin(2 * np.pi * delta_eod * tt)
+
+
+        spikes_base, membran_base = LIFPUnit().simulate(key, trials, t, baseline)
+        spikes_stim, membran_stim = LIFPUnit().simulate(key, trials, t, stimulus)
+
+        self.insert1(ikey)
+
+        for i, (bsp, ssp) in enumerate(zip(spikes_base, spikes_stim)):
+            PUnitSimulations.BaselineSpikes().insert1(dict(key, trial_idx = i, times = bsp))
+            PUnitSimulations.StimulusSpikes().insert1(dict(key, trial_idx = i, times = ssp))
+
+        PUnitSimulations.BaselineMembranePotential().insert1(dict(key, potential=membran_base))
+        PUnitSimulations.StimulusMembranePotential().insert1(dict(key, potential=membran_stim))
+        PUnitSimulations.Baseline().insert1(dict(key, signal=bl))
+        PUnitSimulations.Stimulus().insert1(dict(key, signal=stimulus(t)))
+
+    class BaselineSpikes(dj.Part):
+        definition = """
+        # holds the simulated spiketimes
+
+        ->PUnitSimulations
+        trial_idx       : int # index of trial
+        ---
+        times           : longblob # spike times
+        """
+
+    class StimulusSpikes(dj.Part):
+        definition = """
+        # holds the simulated spiketimes
+
+        ->PUnitSimulations
+        trial_idx       : int # index of trial
+        ---
+        times           : longblob # spike times
+        """
+
+    class BaselineMembranePotential(dj.Part):
+        definition = """
+        # holds the simulated membrane potential
+
+        ->PUnitSimulations
+        ---
+        potential       : longblob # membrane potential
+        """
+
+    class StimulusMembranePotential(dj.Part):
+        definition = """
+        # holds the simulated membrane potential
+
+        ->PUnitSimulations
+        ---
+        potential       : longblob # membrane potential
+        """
+
+    class Baseline(dj.Part):
+        definition = """
+        # holds the simulated membrane potential
+
+        ->PUnitSimulations
+        ---
+        signal       : longblob # membrane potential
+        """
+
+    class Stimulus(dj.Part):
+        definition = """
+        # holds the simulated membrane potential
+
+        ->PUnitSimulations
+        ---
+        signal       : longblob # membrane potential
+        """
 
 
 if __name__ == '__main__':
     EODFit().populate(reserve_jobs=True)
     LIFPUnit().populate(reserve_jobs=True)
+    PUnitSimulations().populate(reserve_jobs=True)
