@@ -331,18 +331,33 @@ class LIFPUnit(dj.Computed):
 
 @schema
 @gitlog
+class ForeignEODDelta(dj.Lookup):
+    definition = """
+    d_id        : int
+    ---
+    delta_eod   : double
+    """
+
+    contents = [
+        (0, -200),
+        (1, -400),
+        (2, 200),
+        (3, 400),
+    ]
+
+@schema
+@gitlog
 class PUnitSimulations(dj.Computed):
     definition = """
     # LIF simulations
 
     ->LIFPUnit
-    ->EODFit
+    ->ForeignEODDelta
     ---
+    dt=0.00005
+
     """
 
-    @property
-    def populated_from(self):
-        return LIFPUnit() * EODFit() & 'ABS(fundamental-resonant_freq)<0.1'
 
     def _make_tuples(self, key):
         pass
