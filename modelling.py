@@ -354,7 +354,7 @@ class PUnitSimulations(dj.Computed):
     ->LIFPUnit
     ->ForeignEODDelta
     ---
-    dt=0.00005
+    dt=0.00005      : double
 
     """
 
