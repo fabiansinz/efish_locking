@@ -47,13 +47,6 @@ for key in PUnitSimulations().project().fetch.as_dict:
         PUnitSimulations().plot_stimulus_spectrum(key, ax['stimulus_spectrum'])
         PUnitSimulations().plot_membrane_potential_spectrum(key, ax['membrane_spectrum'])
         PUnitSimulations().plot_spike_spectrum(key, ax['sim_spike_spectrum'])
-        #----------------------------------
-        # TODO: Remove this later
-        from IPython import embed
-        embed()
-        exit()
-        #----------------------------------
-
-        SecondOrderSpikeSpectra().plot(ax['ispectrum'],extrac_restr,f_max)
+        #SecondOrderSpikeSpectra().plot(ax['ispectrum'],extrac_restr,f_max)
     plt.show()
     exit()

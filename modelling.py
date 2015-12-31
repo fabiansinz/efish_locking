@@ -351,7 +351,7 @@ class PUnitSimulations(dj.Computed):
 
     @property
     def populated_from(self):
-        return (LIFPUnit()*Runs() & dict(am=0, n_harmonics=0, cell_type='p-unit', contrast=20)).project()
+        return (LIFPUnit() * Runs() & dict(am=0, n_harmonics=0, cell_type='p-unit', contrast=20)).project()
 
     def _make_tuples(self, key):
         dt, duration = 0.00005, 2
@@ -377,7 +377,7 @@ class PUnitSimulations(dj.Computed):
 
         n = int(duration / dt)
         w = np.fft.fftfreq(n, d=dt)
-        w = w[(w >=0) & (w <=2000)]
+        w = w[(w >= 0) & (w <= 3000)]
         vs = np.mean([circ.event_series.direct_vector_strength_spectrum(sp, w) for sp in spikes_stim], axis=0)
         ci = second_order_critical_vector_strength(spikes_stim)
 
@@ -523,22 +523,19 @@ class PUnitSimulations(dj.Computed):
         ax.set_ylabel('spectrum of\nLIF input z(t)')
 
     def plot_spike_spectrum(self, key, ax, f_max=2000):
-        dt, duration = (self & key).fetch1['dt', 'duration']
         df = (Runs() & key).fetch1['delta_f']
 
         eod = (EODFit() & key).fetch1['fundamental']
         eod2 = eod + df
-        n = int(duration / dt)
 
+        w, vs, ci = (PUnitSimulations.StimulusSecondOrderSpectrum() & key).fetch1['freq','spectrum','ci']
         stimulus_spikes = (PUnitSimulations.StimulusSpikes() & key).fetch['times']
-        w = np.fft.fftfreq(n, d=dt)
         idx = (w > 0) & (w < f_max)
 
-        vs = np.asarray([circ.event_series.direct_vector_strength_spectrum(sp, w[idx]) for sp in stimulus_spikes])
         ax.set_ylim((0, .8))
         ax.set_yticks(np.arange(0, 1, .4))
 
-        ax.fill_between(w[idx], 0 * w[idx], np.mean(vs, axis=0), color='dodgerblue')
+        ax.fill_between(w[idx], 0 * w[idx], vs[idx], color='dodgerblue')
         ci = second_order_critical_vector_strength(stimulus_spikes)
         ax.fill_between(w[idx], 0 * w[idx], 0 * w[idx] + ci, color='silver', alpha=.5)
         ax.text(2 * eod - eod2, 0.25, 'EOD + beat=%.1fHz' % (2 * eod - eod2), rotation=30, horizontalalignment='left',
