@@ -6,7 +6,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 from djaddon import gitlog
-from schemata import EFishes, peakdet, Runs
+from schemata import EFishes, peakdet, Runs, Cells
 import warnings
 from scipy.signal import butter, filtfilt
 import pycircstat as circ
@@ -351,7 +351,7 @@ class PUnitSimulations(dj.Computed):
 
     @property
     def populated_from(self):
-        return (LIFPUnit() * Runs() & dict(am=0, n_harmonics=0, cell_type='p-unit', contrast=20)).project()
+        return (LIFPUnit() * Runs() * Cells() & dict(am=0, n_harmonics=0, cell_type='p-unit', contrast=20)).project()
 
     def _make_tuples(self, key):
         dt, duration = 0.00005, 2

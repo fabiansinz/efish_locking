@@ -1,5 +1,6 @@
 from analyses import SecondOrderSpikeSpectra
 from modelling import *
+from schemata import *
 import matplotlib.pyplot as plt
 from plot_settings import params as plot_params
 
@@ -17,7 +18,7 @@ class Figure04:
                 'stimulus_spectrum': self.ax[0],
                 'membrane_spectrum': self.ax[1],
                 'sim_spike_spectrum': self.ax[2],
-                'real_spike_spectrum': self.ax[2],
+                'real_spike_spectrum': self.ax[3],
             }
 
         return self.fig, self.ax
@@ -30,6 +31,8 @@ class Figure04:
         ax['stimulus_spectrum'].set_xticklabels([])
         sns.despine(ax=ax['membrane_spectrum'], left=True, offset=0)
         sns.despine(ax=ax['sim_spike_spectrum'], offset=0)
+        sns.despine(ax=ax['real_spike_spectrum'], offset=0)
+        ax['real_spike_spectrum'].set_xlabel('frequency [Hz]')
 
         for a in ax.values():
             a.tick_params('both', length=3, width=1, which='both')
@@ -47,6 +50,15 @@ for key in PUnitSimulations().project().fetch.as_dict:
         PUnitSimulations().plot_stimulus_spectrum(key, ax['stimulus_spectrum'])
         PUnitSimulations().plot_membrane_potential_spectrum(key, ax['membrane_spectrum'])
         PUnitSimulations().plot_spike_spectrum(key, ax['sim_spike_spectrum'])
-        #SecondOrderSpikeSpectra().plot(ax['ispectrum'],extrac_restr,f_max)
+
+        #----------------------------------
+        # TODO: Remove this later
+        from IPython import embed
+        embed()
+        exit()
+        #----------------------------------
+
+
+        SecondOrderSpikeSpectra().plot(ax['real_spike_spectrum'],key, f_max=2000)
     plt.show()
     exit()
