@@ -273,7 +273,7 @@ class LIFPUnit(dj.Computed):
                           offset=17,
                           gain=70))
 
-    def simulate(self, key, n, t, s, y0=None):
+    def simulate(self, key, n, t, stimulus, y0=None):
         """
         Samples spikes from leaky integrate and fire neuron with id==settings_name and time t.
         Returns n trials
@@ -281,7 +281,7 @@ class LIFPUnit(dj.Computed):
         :param key: key that uniquely identifies a setting
         :param n: number of trials
         :param t: time array
-        :param s: stimulus as a function of time (function handle)
+        :param stimulus: stimulus as a function of time (function handle)
         :return: spike times
         """
 
@@ -301,7 +301,7 @@ class LIFPUnit(dj.Computed):
         def _d(y, t):
             return np.array([
                 y[1],
-                s(t) - 2 * zeta * w0 * y[1] - w0 ** 2 * y[0],
+                stimulus(t) - 2 * zeta * w0 * y[1] - w0 ** 2 * y[0],
                 (-y[2] + gain * alpha * max(y[0], 0)) / tau
             ])
 
@@ -343,6 +343,7 @@ class ForeignEODDelta(dj.Lookup):
         (3, 400),
     ]
 
+
 @schema
 @gitlog
 class PUnitSimulations(dj.Computed):
@@ -357,7 +358,6 @@ class PUnitSimulations(dj.Computed):
     """
 
     def _make_tuples(self, key):
-
         dt, duration = 0.00005, 2
         trials = 50
         ikey = dict(key)
@@ -368,14 +368,12 @@ class PUnitSimulations(dj.Computed):
         delta_eod = (ForeignEODDelta() & key).fetch1['delta_eod']
         other_eod = eod + delta_eod
 
-        t = np.arange(0,duration,dt)
-
+        t = np.arange(0, duration, dt)
 
         baseline = EODFit().eod_func(key)
         bl = baseline(t)
-        fac = (bl.max()-bl.min())*0.2
-        stimulus = lambda tt: baseline(tt) + fac*np.sin(2 * np.pi * delta_eod * tt)
-
+        fac = (bl.max() - bl.min()) * 0.2 / 2
+        stimulus = lambda tt: baseline(tt) + fac * np.sin(2 * np.pi * other_eod * tt)
 
         spikes_base, membran_base = LIFPUnit().simulate(key, trials, t, baseline)
         spikes_stim, membran_stim = LIFPUnit().simulate(key, trials, t, stimulus)
@@ -383,8 +381,8 @@ class PUnitSimulations(dj.Computed):
         self.insert1(ikey)
 
         for i, (bsp, ssp) in enumerate(zip(spikes_base, spikes_stim)):
-            PUnitSimulations.BaselineSpikes().insert1(dict(key, trial_idx = i, times = bsp))
-            PUnitSimulations.StimulusSpikes().insert1(dict(key, trial_idx = i, times = ssp))
+            PUnitSimulations.BaselineSpikes().insert1(dict(key, trial_idx=i, times=bsp))
+            PUnitSimulations.StimulusSpikes().insert1(dict(key, trial_idx=i, times=ssp))
 
         PUnitSimulations.BaselineMembranePotential().insert1(dict(key, potential=membran_base))
         PUnitSimulations.StimulusMembranePotential().insert1(dict(key, potential=membran_stim))
