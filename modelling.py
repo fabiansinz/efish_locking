@@ -9,8 +9,26 @@ from djaddon import gitlog
 from schemata import EFishes, peakdet, Runs
 import warnings
 from scipy.signal import butter, filtfilt
+import pycircstat as circ
+from scipy import stats
 
 schema = schema('efish_locking', locals())
+
+
+def second_order_critical_vector_strength(spikes, alpha=0.001):
+    spikes_per_trial = [len(s) for s in spikes]
+    poiss_rate = np.mean(spikes_per_trial)
+    r = np.linspace(0, 2, 10000)
+    dr = r[1] - r[0]
+    mu = np.sum(2 * poiss_rate * r ** 2 * np.exp(poiss_rate * np.exp(-r ** 2) - poiss_rate - r ** 2) / (
+        1 - np.exp(-poiss_rate))) * dr
+    s = np.sum(2 * poiss_rate * r ** 3 * np.exp(poiss_rate * np.exp(-r ** 2) - poiss_rate - r ** 2) / (
+        1 - np.exp(-poiss_rate))) * dr
+    s2 = np.sqrt(s - mu ** 2.)
+    threshold = stats.norm.ppf(1 - alpha, loc=mu,
+                               scale=s2 / np.sqrt(len(spikes_per_trial)))  # use central limit theorem
+
+    return threshold
 
 
 def butter_lowpass_filter(data, highcut, fs, order=5):
@@ -24,15 +42,6 @@ def butter_lowpass(highcut, fs, order=5):
     high = highcut / nyq
     b, a = butter(order, high, btype='low')
     return b, a
-
-
-#
-# def detect_peaks_and_troughs(normalized_eod, peak_threshold=None):
-#     if peak_threshold is None:
-#         peak_threshold = np.percentile(np.abs(normalized_eod), 99.9) - np.percentile(np.abs(normalized_eod), 50)
-#         _, eod_peak_idx, _, eod_trough_idx = peakdet(normalized_eod, peak_threshold,
-#                                                      np.arange(len(normalized_eod), dtype=int))
-#     return normalized_eod[eod_peak_idx], eod_peak_idx, normalized_eod[eod_trough_idx], eod_trough_idx
 
 
 def normalize_signal(eod, samplerate, norm_window=.5):
@@ -329,33 +338,20 @@ class LIFPUnit(dj.Computed):
 
 @schema
 @gitlog
-class ForeignEODDelta(dj.Lookup):
-    definition = """
-    d_id        : int
-    ---
-    delta_eod   : double
-    """
-
-    contents = [
-        (0, -200),
-        (1, -400),
-        (2, 200),
-        (3, 400),
-    ]
-
-
-@schema
-@gitlog
 class PUnitSimulations(dj.Computed):
     definition = """
     # LIF simulations
 
     ->LIFPUnit
-    ->ForeignEODDelta
+    ->Runs
     ---
     dt              : double # time resolution for differential equation
     duration        : double # duration of trial in seconds
     """
+
+    @property
+    def populated_from(self):
+        return (LIFPUnit()*Runs() & dict(am=0, n_harmonics=0, cell_type='p-unit', contrast=20)).project()
 
     def _make_tuples(self, key):
         dt, duration = 0.00005, 2
@@ -365,8 +361,9 @@ class PUnitSimulations(dj.Computed):
         ikey['duration'] = duration
 
         eod = (EODFit() & key).fetch1['fundamental']
-        delta_eod = (ForeignEODDelta() & key).fetch1['delta_eod']
-        other_eod = eod + delta_eod
+
+        delta_f = (Runs() & key).fetch1['delta_f']
+        other_eod = eod + delta_f
 
         t = np.arange(0, duration, dt)
 
@@ -378,6 +375,12 @@ class PUnitSimulations(dj.Computed):
         spikes_base, membran_base = LIFPUnit().simulate(key, trials, t, baseline)
         spikes_stim, membran_stim = LIFPUnit().simulate(key, trials, t, stimulus)
 
+        n = int(duration / dt)
+        w = np.fft.fftfreq(n, d=dt)
+        w = w[(w >=0) & (w <=2000)]
+        vs = np.mean([circ.event_series.direct_vector_strength_spectrum(sp, w) for sp in spikes_stim], axis=0)
+        ci = second_order_critical_vector_strength(spikes_stim)
+
         self.insert1(ikey)
 
         for i, (bsp, ssp) in enumerate(zip(spikes_base, spikes_stim)):
@@ -388,6 +391,7 @@ class PUnitSimulations(dj.Computed):
         PUnitSimulations.StimulusMembranePotential().insert1(dict(key, potential=membran_stim))
         PUnitSimulations.Baseline().insert1(dict(key, signal=bl))
         PUnitSimulations.Stimulus().insert1(dict(key, signal=stimulus(t)))
+        PUnitSimulations.StimulusSecondOrderSpectrum().insert1(dict(key, spectrum=vs, ci=ci, freq=w))
 
     class BaselineSpikes(dj.Part):
         definition = """
@@ -407,6 +411,17 @@ class PUnitSimulations(dj.Computed):
         trial_idx       : int # index of trial
         ---
         times           : longblob # spike times
+        """
+
+    class StimulusSecondOrderSpectrum(dj.Part):
+        definition = """
+        # holds the vector strength spectrum of simulated spiketimes
+
+        ->PUnitSimulations
+        ---
+        freq               : longblob # frequencies at which the vector strengths are computed
+        spectrum           : longblob # spike times
+        ci                 : double   # (1-0.001) confidence interval
         """
 
     class BaselineMembranePotential(dj.Part):
@@ -444,6 +459,91 @@ class PUnitSimulations(dj.Computed):
         ---
         signal       : longblob # membrane potential
         """
+
+    def plot_stimulus_spectrum(self, key, ax, f_max=2000):
+        dt = (self & key).fetch1['dt']
+        eod = (EODFit() & key).fetch1['fundamental']
+        eod2 = eod + (Runs() & key).fetch1['delta_f']
+
+        stimulus_signal = (PUnitSimulations.Stimulus() & key).fetch1['signal']
+        w = np.fft.fftfreq(len(stimulus_signal), d=dt)
+        idx = (w > 0) & (w < f_max)
+
+        S = np.abs(np.fft.fft(stimulus_signal))
+        S /= S.max()
+
+        ax.fill_between(w[idx], 0 * w[idx], S[idx], color='dodgerblue')
+
+        # --- get parameters from database
+        zeta, tau, gain, wr, lif_tau, offset, threshold, reset, noisesd = (LIFPUnit() & key).fetch1[
+            'zeta', 'tau', 'gain', 'resonant_freq', 'lif_tau', 'offset', 'threshold', 'reset', 'noise_sd']
+        wr *= 2 * np.pi
+        w0 = wr / np.sqrt(1 - 2 * zeta ** 2)
+
+        w2 = w * 2 * np.pi
+        Zm = np.sqrt((2 * w0 * zeta) ** 2 + (w2 ** 2 - w0 ** 2) ** 2 / w2 ** 2)
+        dho = 1. / (w2[idx] * Zm[idx])
+
+        ax.plot(w[idx], dho / np.nanmax(dho), '--', dashes=(2, 2), color='gray', label='harmonic oscillator', lw=1,
+                zorder=-10)
+        lp = 1. / np.sqrt(w2[idx] ** 2 * tau ** 2 + 1)
+        ax.plot(w[idx], lp / lp.max(), '--', color='gray', label='low pass filter', lw=1, zorder=-10)
+
+        ax.text(eod, 1.1, 'EOD=%.1fHz' % eod, rotation=-30, horizontalalignment='right',
+                verticalalignment='bottom', fontsize=6)
+        ax.text(eod * 2, 0.7, '2 EOD=%.1fHz' % (2 * eod), rotation=-30, horizontalalignment='right',
+                verticalalignment='bottom', fontsize=6)
+        ax.text(eod2, 0.8, 'stimulus=%.1fHz' % eod2, rotation=-30, horizontalalignment='right',
+                verticalalignment='bottom', fontsize=6)
+        ax.set_ylim((0, 2))
+        ax.set_yticks([])
+        ax.set_ylabel('spectrum of\nstimulus s(t)')
+        ax.legend(loc='upper right')
+
+        ax.set_xlim((0, f_max))
+
+    def plot_membrane_potential_spectrum(self, key, ax, f_max=2000):
+        dt = (self & key).fetch1['dt']
+        eod = (EODFit() & key).fetch1['fundamental']
+        eod2 = eod + (Runs() & key).fetch1['delta_f']
+
+        membrane_potential = (PUnitSimulations.StimulusMembranePotential() & key).fetch1['potential']
+        w = np.fft.fftfreq(len(membrane_potential), d=dt)
+        idx = (w > 0) & (w < f_max)
+
+        M = np.abs(np.fft.fft(membrane_potential))
+        M /= M[idx].max()
+        ax.fill_between(w[idx], 0 * w[idx], M[idx], color='dodgerblue')
+        ax.set_ylim((0, 1.5))
+        ax.text(eod - eod2, 0.7, 'beat=%.1fHz' % (eod - eod2), rotation=30, horizontalalignment='left',
+                verticalalignment='bottom', fontsize=6)
+        ax.text(eod + eod2, 0.3, '2 EOD - beat=%.1fHz' % (eod + eod2), rotation=30, horizontalalignment='left',
+                verticalalignment='bottom', fontsize=6)
+        ax.set_yticks([])
+        ax.set_ylabel('spectrum of\nLIF input z(t)')
+
+    def plot_spike_spectrum(self, key, ax, f_max=2000):
+        dt, duration = (self & key).fetch1['dt', 'duration']
+        df = (Runs() & key).fetch1['delta_f']
+
+        eod = (EODFit() & key).fetch1['fundamental']
+        eod2 = eod + df
+        n = int(duration / dt)
+
+        stimulus_spikes = (PUnitSimulations.StimulusSpikes() & key).fetch['times']
+        w = np.fft.fftfreq(n, d=dt)
+        idx = (w > 0) & (w < f_max)
+
+        vs = np.asarray([circ.event_series.direct_vector_strength_spectrum(sp, w[idx]) for sp in stimulus_spikes])
+        ax.set_ylim((0, .8))
+        ax.set_yticks(np.arange(0, 1, .4))
+
+        ax.fill_between(w[idx], 0 * w[idx], np.mean(vs, axis=0), color='dodgerblue')
+        ci = second_order_critical_vector_strength(stimulus_spikes)
+        ax.fill_between(w[idx], 0 * w[idx], 0 * w[idx] + ci, color='silver', alpha=.5)
+        ax.text(2 * eod - eod2, 0.25, 'EOD + beat=%.1fHz' % (2 * eod - eod2), rotation=30, horizontalalignment='left',
+                verticalalignment='bottom', fontsize=6)
+        ax.set_ylabel('vector strength spectrum')
 
 
 if __name__ == '__main__':
