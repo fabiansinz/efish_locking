@@ -542,6 +542,19 @@ class PUnitSimulations(dj.Computed):
                 verticalalignment='bottom', fontsize=6)
         ax.set_ylabel('vector strength spectrum')
 
+    def plot_isi(self, key, ax):
+        eod = (EODFit() & key).fetch1['fundamental']
+        period = 1/eod
+        baseline_spikes = (PUnitSimulations.BaselineSpikes() & key).fetch['times']
+        isi = np.hstack((np.diff(r) for r in baseline_spikes))
+        ax.hist(isi, bins=320, lw=0, color=sns.xkcd_rgb['charcoal grey'])
+        ax.set_xlim((0,20*period))
+        ax.set_xticks(np.arange(0,25,5)*period)
+        ax.set_xticklabels(np.arange(0,25,5))
+        ax.set_label('time [EOD cycles]')
+
+
+
 
 if __name__ == '__main__':
     EODFit().populate(reserve_jobs=True)
