@@ -74,7 +74,8 @@ class Figure04:
 for key in PUnitSimulations().project().fetch.as_dict:
     dir = 'figures/figure04/' + key['id']
     mkdir(dir)
-    with Figure04(filename=dir + '/figure04_' + key['cell_id']+  '.pdf') as (fig, ax):
+    df = (Runs() & key).fetch1['delta_f']
+    with Figure04(filename=dir + '/figure04_' + key['cell_id'] +'df_'+ str(df) + '.pdf') as (fig, ax):
         PUnitSimulations().plot_stimulus_spectrum(key, ax['stimulus_spectrum'])
         PUnitSimulations().plot_membrane_potential_spectrum(key, ax['membrane_spectrum'])
         PUnitSimulations().plot_spike_spectrum(key, ax['sim_spike_spectrum'])

@@ -271,16 +271,17 @@ class LIFPUnit(dj.Computed):
 
     def _make_tuples(self, key):
         eod = (EODFit() & key).fetch1['fundamental']
-        self.insert1(dict(key, id='nwg2015',
-                          tau=0.002,
-                          zeta=0.2,
-                          resonant_freq=eod,
-                          noise_sd=115,
-                          threshold=10,
-                          reset=0,
-                          lif_tau=0.001,
-                          offset=17,
-                          gain=70))
+        self.insert1(dict(key, id='nwgimproved',
+                         zeta = 0.2,
+                         tau = 0.002,
+                         resonant_freq = eod,
+                         gain = 70,
+                         offset = 9,
+                         noise_sd = 30,
+                         threshold=14.,
+                         reset=0.,
+                         lif_tau=0.001
+                     ))
 
     def simulate(self, key, n, t, stimulus, y0=None):
         """
@@ -354,7 +355,7 @@ class PUnitSimulations(dj.Computed):
         return (LIFPUnit() * Runs() * Cells() & dict(am=0, n_harmonics=0, cell_type='p-unit', contrast=20)).project()
 
     def _make_tuples(self, key):
-        dt, duration = 0.00005, 2
+        dt, duration = 0.000005, 1
         trials = 50
         ikey = dict(key)
         ikey['dt'] = dt
