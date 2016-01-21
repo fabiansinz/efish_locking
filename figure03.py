@@ -11,14 +11,17 @@ df = pd.DataFrame((Runs()*SecondOrderSignificantPeaks()*SpikeJitter()*Cells()
                           cell_type='p-unit', am=0, n_harmonics=0)
                    & 'stimulus_coeff > 0'
                    & 'frequency > 0').fetch())
-df['spread'] = np.sqrt(df['var'])/2/np.pi/df['eod']*1000
+
+df['jitter'] = df['std'] # rename to avoid conflict with std function
+
+
 sns.set_context('paper')
 
 with sns.axes_style('ticks'):
     fig,ax = plt.subplots(1,3, figsize=(7,3), dpi=400, sharey=True)
 
 ax[0].scatter( df.frequency, df.vector_strength, color='gray', edgecolors='w',lw=.5)
-ax[1].scatter( df.spread, df.vector_strength, color='gray', edgecolors='w',lw=.5)
+ax[1].scatter( df.jitter, df.vector_strength, color='gray', edgecolors='w',lw=.5)
 ax[1].axis('tight')
 ax[1].set_xticks(ax[1].get_xticks()[::2])
 
@@ -28,6 +31,7 @@ std = df.groupby('contrast').std().reset_index()
 xpos = np.arange(len(mu))
 ax[2].bar( xpos, mu.vector_strength, yerr=std.vector_strength, color='gray', lw=0,
            ecolor='k', align='center')
+# sns.violinplot('contrast', 'vector_strength', data=df, order=[1.25,2.5,5,10,20], color='gray', ax=ax[2])
 
 ax[2].set_xticks(xpos)
 ax[2].set_xticklabels(mu.contrast)
@@ -44,12 +48,15 @@ for a in ax:
     a.tick_params('x', length=3, width=1)
 
 ax[0].set_ylim((0,1))
+# ax[1].set_xlim((0,1.1))
+# ax[1].set_xticks([0,.5,1.])
+# sns.despine(ax=ax[1], trim=True, left=True)
 ax[2].set_xlim((-0.5, 4.5))
 ax[0].set_xlim((0,2100))
 
 ax[0].set_xlabel('frequency [Hz]')
 ax[0].set_ylabel('vector strength')
-ax[1].set_xlabel('jitter [ms]')
+ax[1].set_xlabel('circular std')
 ax[2].set_xlabel('contrast [%]')
 
 ax[0].text(-0.3, 1, 'A', transform=ax[0].transAxes, fontweight='bold')
@@ -61,9 +68,11 @@ fig.tight_layout()
 fig.savefig('figures/figure03.pdf')
 
 
-glm = smf.glm('vector_strength ~ frequency + spread + contrast', data=df, family=sm.families.Gamma()).fit()
+glm = smf.glm('vector_strength ~ frequency*jitter + contrast', data=df, family=sm.families.Gamma()).fit()
 print(glm.summary())
-print(np.corrcoef(df.spread, df.vector_strength))
+print(np.corrcoef(df.jitter*df.frequency, df.vector_strength))
 
-print('1 sigma in Frequency domain', 1/(2*np.pi*np.mean(df.spread/1000)))
-print('2 sigma in Frequency domain', 2/(2*np.pi*np.mean(df.spread/1000)))
+df['spread'] = df['std']/df['eod']
+
+print('1 sigma in Frequency domain', 1/(2*np.pi*np.mean(df.spread)))
+print('2 sigma in Frequency domain', 2/(2*np.pi*np.mean(df.spread)))

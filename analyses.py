@@ -6,6 +6,8 @@ from scipy import stats
 import datajoint as dj
 from datajoint import schema
 import sympy
+
+from djaddon import gitlog
 from helpers import mkdir
 from schemata import Runs, GlobalEFieldPeaksTroughs, peakdet, Cells, LocalEODPeaksTroughs
 import numpy as np
@@ -271,7 +273,6 @@ class PlotableSpectrum:
             ax.legend(by_label.values(), by_label.keys())
 
 
-
 @server
 class FirstOrderSpikeSpectra(dj.Computed, PlotableSpectrum):
     definition = """
@@ -307,6 +308,7 @@ class FirstOrderSpikeSpectra(dj.Computed, PlotableSpectrum):
 
 
 @server
+@gitlog
 class SpikeJitter(dj.Computed):
     definition = """
     # circular variance and mean of spike times within an EOD period
@@ -316,6 +318,7 @@ class SpikeJitter(dj.Computed):
     ---
 
     var         : double # circular variance
+    std         : double # circular std
     mean        : double # circular mean
     """
 
@@ -331,10 +334,13 @@ class SpikeJitter(dj.Computed):
 
         aggregated_spikes = np.hstack([s / 1000 - p[0] * dt for s, p in zip(*trials.fetch['times', 'peaks'])])
 
-        aggregated_spikes %= 1/eod
-        aggregated_spikes *= eod * 2*np.pi # normalize to 2*pi
-        key['var'], key['mean'] = circ.var(aggregated_spikes), circ.mean(aggregated_spikes)
+        aggregated_spikes %= 1 / eod
+
+        aggregated_spikes *= eod * 2 * np.pi  # normalize to 2*pi
+        key['var'], key['mean'], key['std'] = \
+            circ.var(aggregated_spikes), circ.mean(aggregated_spikes), circ.std(aggregated_spikes)
         self.insert1(key)
+
 
 @server
 class SecondOrderSpikeSpectra(dj.Computed, PlotableSpectrum):
@@ -408,7 +414,6 @@ class FirstOrderSignificantPeaks(dj.Computed):
                 s['refined'] = double_peaks
                 self.insert1(s)
                 double_peaks -= 1
-
 
 
 @server
@@ -654,7 +659,7 @@ class EODStimulusPSTSpikes(dj.Computed):
             y = np.asarray(y)
 
             ax.set_xlim((-whs, whs))
-            ax.set_xticks([-whs, -whs/2, 0, whs/2, whs])
+            ax.set_xticks([-whs, -whs / 2, 0, whs / 2, whs])
 
             # ax.set_xticklabels(['-10 EOD', '0', '10 EOD'])
             ax.set_xticklabels([-10, -5, 0, 5, 10])
@@ -663,8 +668,8 @@ class EODStimulusPSTSpikes(dj.Computed):
             ax.tick_params(axis='y', length=0, width=0, which='major')
 
             for y_from, y_to in zip(y[::2], y[1::2]):
-                ax.fill_between([-whs, whs], [y_from, y_from],[y_to, y_to], color='gainsboro', zorder=-20)
-            ax.set_yticks(0.5 * (y[1:] +y[:-1]))
+                ax.fill_between([-whs, whs], [y_from, y_from], [y_to, y_to], color='gainsboro', zorder=-20)
+            ax.set_yticks(0.5 * (y[1:] + y[:-1]))
             ax.set_yticklabels(yticks)
             ax.set_ylim(y[[0, -1]])
 
