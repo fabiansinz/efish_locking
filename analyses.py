@@ -306,6 +306,39 @@ class FirstOrderSpikeSpectra(dj.Computed, PlotableSpectrum):
         vs[np.isnan(vs)] = 0
         self.insert1(key)
 
+@server
+@gitlog
+class StimulusSpikeJitter(dj.Computed):
+    definition = """
+    # circular variance and std of spike times within an EOD period during stimulation
+
+    -> Runs
+
+    ---
+    stim_var         : double # circular variance
+    stim_std         : double # circular std
+
+    """
+
+    @property
+    def populated_from(self):
+        return Runs() & GlobalEFieldPeaksTroughs() & dict(cell_type='p-unit')
+
+    def _make_tuples(self, key):
+        print('Processing', key['cell_id'], 'run', key['run_id'], )
+        dt = 1. / (Runs() & key).fetch1['samplingrate']
+        eod = (Runs() & key).fetch1['eod']
+        trials = ((GlobalEFieldPeaksTroughs() * Runs.SpikeTimes()) & key)
+
+        aggregated_spikes = np.hstack([s / 1000 - p[0] * dt for s, p in zip(*trials.fetch['times', 'peaks'])])
+        # aggregated_spikes = np.hstack([s['times'] / 1000 - p['peaks'][0] * dt for s, p in zip(st, pt)])
+
+        aggregated_spikes %= 1 / eod
+
+        aggregated_spikes *= eod * 2 * np.pi  # normalize to 2*pi
+        key['stim_var'], key['stim_std'] = circ.var(aggregated_spikes), circ.std(aggregated_spikes)
+        self.insert1(key)
+
 
 @server
 @gitlog

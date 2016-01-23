@@ -12,6 +12,7 @@ df = pd.DataFrame((Runs()*SecondOrderSignificantPeaks()*SpikeJitter()*Cells()
                    & 'stimulus_coeff > 0'
                    & 'frequency > 0').fetch())
 
+df['spread'] = df['std']/df['eod']/2/np.pi
 df['jitter'] = df['std'] # rename to avoid conflict with std function
 
 
@@ -71,8 +72,6 @@ fig.savefig('figures/figure03.pdf')
 glm = smf.glm('vector_strength ~ frequency*jitter + contrast', data=df, family=sm.families.Gamma()).fit()
 print(glm.summary())
 print(np.corrcoef(df.jitter*df.frequency, df.vector_strength))
-
-df['spread'] = df['std']/df['eod']
 
 print('1 sigma in Frequency domain', 1/(2*np.pi*np.mean(df.spread)))
 print('2 sigma in Frequency domain', 2/(2*np.pi*np.mean(df.spread)))
