@@ -6,14 +6,14 @@ import statsmodels.formula.api as smf
 import seaborn as sns
 import numpy as np
 
-df = pd.DataFrame((Runs()*SecondOrderSignificantPeaks()*BaselineSpikeJitter()*Cells()
+df = pd.DataFrame((Runs()*SecondOrderSignificantPeaks()*StimulusSpikeJitter()*Cells()
                    & dict(eod_coeff=0, baseline_coeff=0, refined=1,
                           cell_type='p-unit', am=0, n_harmonics=0)
                    & 'stimulus_coeff > 0'
                    & 'frequency > 0').fetch())
 
-df['spread'] = df['std']/df['eod']/2/np.pi
-df['jitter'] = df['std'] # rename to avoid conflict with std function
+df['spread'] = df['stim_std']/df['eod']/2/np.pi
+df['jitter'] = df['stim_std'] # rename to avoid conflict with std function
 
 
 sns.set_context('paper')
@@ -69,7 +69,7 @@ fig.tight_layout()
 fig.savefig('figures/figure03.pdf')
 
 
-glm = smf.glm('vector_strength ~ frequency*jitter + contrast', data=df, family=sm.families.Gamma()).fit()
+glm = smf.glm('vector_strength ~ frequency * jitter + contrast', data=df, family=sm.families.Gamma()).fit()
 print(glm.summary())
 print(np.corrcoef(df.jitter*df.frequency, df.vector_strength))
 
