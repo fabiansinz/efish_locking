@@ -6,7 +6,7 @@ import statsmodels.formula.api as smf
 import seaborn as sns
 import numpy as np
 
-df = pd.DataFrame((Runs()*SecondOrderSignificantPeaks()*SpikeJitter()*Cells()
+df = pd.DataFrame((Runs()*SecondOrderSignificantPeaks()*BaselineSpikeJitter()*Cells()
                    & dict(eod_coeff=0, baseline_coeff=0, refined=1,
                           cell_type='p-unit', am=0, n_harmonics=0)
                    & 'stimulus_coeff > 0'

@@ -9,7 +9,7 @@ import sympy
 
 from djaddon import gitlog
 from helpers import mkdir
-from schemata import Runs, GlobalEFieldPeaksTroughs, peakdet, Cells, LocalEODPeaksTroughs
+from schemata import Runs, GlobalEFieldPeaksTroughs, peakdet, Cells, LocalEODPeaksTroughs, Baseline
 import numpy as np
 from pycircstat import event_series as es
 import pycircstat as circ
@@ -317,18 +317,18 @@ class StimulusSpikeJitter(dj.Computed):
     ---
     stim_var         : double # circular variance
     stim_std         : double # circular std
-
+    stim_mean        : double # circular mean
     """
 
     @property
     def populated_from(self):
-        return Runs() & GlobalEFieldPeaksTroughs() & dict(cell_type='p-unit')
+        return Runs() & LocalEODPeaksTroughs() & dict(cell_type='p-unit')
 
     def _make_tuples(self, key):
         print('Processing', key['cell_id'], 'run', key['run_id'], )
         dt = 1. / (Runs() & key).fetch1['samplingrate']
         eod = (Runs() & key).fetch1['eod']
-        trials = ((GlobalEFieldPeaksTroughs() * Runs.SpikeTimes()) & key)
+        trials = ((LocalEODPeaksTroughs() * Runs.SpikeTimes()) & key)
 
         aggregated_spikes = np.hstack([s / 1000 - p[0] * dt for s, p in zip(*trials.fetch['times', 'peaks'])])
         # aggregated_spikes = np.hstack([s['times'] / 1000 - p['peaks'][0] * dt for s, p in zip(st, pt)])
@@ -336,41 +336,43 @@ class StimulusSpikeJitter(dj.Computed):
         aggregated_spikes %= 1 / eod
 
         aggregated_spikes *= eod * 2 * np.pi  # normalize to 2*pi
-        key['stim_var'], key['stim_std'] = circ.var(aggregated_spikes), circ.std(aggregated_spikes)
+        key['stim_var'], key['stim_mean'], key['stim_std'] = \
+            circ.var(aggregated_spikes), circ.mean(aggregated_spikes), circ.std(aggregated_spikes)
         self.insert1(key)
 
 
 @server
 @gitlog
-class SpikeJitter(dj.Computed):
+class BaselineSpikeJitter(dj.Computed):
     definition = """
     # circular variance and mean of spike times within an EOD period
 
-    -> Runs
+    -> Baseline
 
     ---
 
-    var         : double # circular variance
-    std         : double # circular std
-    mean        : double # circular mean
+    base_var         : double # circular variance
+    base_std         : double # circular std
+    base_mean        : double # circular mean
     """
 
     @property
     def populated_from(self):
-        return Runs() & GlobalEFieldPeaksTroughs() & dict(cell_type='p-unit')
+        return Baseline() & Baseline.LocalEODPeaksTroughs() & dict(cell_type='p-unit')
 
     def _make_tuples(self, key):
-        print('Processing', key['cell_id'], 'run', key['run_id'], )
-        dt = 1. / (Runs() & key).fetch1['samplingrate']
-        eod = (Runs() & key).fetch1['eod']
-        trials = ((GlobalEFieldPeaksTroughs() * Runs.SpikeTimes()) & key)
+        print('Processing', key['cell_id'])
+        sampling_rate, eod = (Baseline() & key).fetch1['samplingrate', 'eod']
+        dt = 1. / sampling_rate
+
+        trials = Baseline.LocalEODPeaksTroughs() * Baseline.SpikeTimes() & key
 
         aggregated_spikes = np.hstack([s / 1000 - p[0] * dt for s, p in zip(*trials.fetch['times', 'peaks'])])
 
         aggregated_spikes %= 1 / eod
 
         aggregated_spikes *= eod * 2 * np.pi  # normalize to 2*pi
-        key['var'], key['mean'], key['std'] = \
+        key['base_var'], key['base_mean'], key['base_std'] = \
             circ.var(aggregated_spikes), circ.mean(aggregated_spikes), circ.std(aggregated_spikes)
         self.insert1(key)
 
@@ -727,4 +729,4 @@ if __name__ == "__main__":
     # plh.populate(reserve_jobs=True)
 
     # EODStimulusPSTSpikes().populate(reserve_jobs=True)
-    SpikeJitter().populate(reserve_jobs=True)
+    BaselineSpikeJitter().populate(reserve_jobs=True)
