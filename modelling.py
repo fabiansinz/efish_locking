@@ -6,7 +6,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 from djaddon import gitlog
-from schemata import EFishes, peakdet, Runs, Cells
+from schemata import EFishes, peakdet, Runs, Cells, LocalEODPeaksTroughs
 import warnings
 from scipy.signal import butter, filtfilt
 import pycircstat as circ
@@ -272,16 +272,16 @@ class LIFPUnit(dj.Computed):
     def _make_tuples(self, key):
         eod = (EODFit() & key).fetch1['fundamental']
         self.insert1(dict(key, id='nwgimproved',
-                         zeta = 0.2,
-                         tau = 0.002,
-                         resonant_freq = eod,
-                         gain = 70,
-                         offset = 9,
-                         noise_sd = 30,
-                         threshold=14.,
-                         reset=0.,
-                         lif_tau=0.001
-                     ))
+                          zeta=0.2,
+                          tau=0.002,
+                          resonant_freq=eod,
+                          gain=70,
+                          offset=9,
+                          noise_sd=30,
+                          threshold=14.,
+                          reset=0.,
+                          lif_tau=0.001
+                          ))
 
     def simulate(self, key, n, t, stimulus, y0=None):
         """
@@ -529,7 +529,7 @@ class PUnitSimulations(dj.Computed):
         eod = (EODFit() & key).fetch1['fundamental']
         eod2 = eod + df
 
-        w, vs, ci = (PUnitSimulations.StimulusSecondOrderSpectrum() & key).fetch1['freq','spectrum','ci']
+        w, vs, ci = (PUnitSimulations.StimulusSecondOrderSpectrum() & key).fetch1['freq', 'spectrum', 'ci']
         stimulus_spikes = (PUnitSimulations.StimulusSpikes() & key).fetch['times']
         idx = (w > 0) & (w < f_max)
 
@@ -545,16 +545,157 @@ class PUnitSimulations(dj.Computed):
 
     def plot_isi(self, key, ax):
         eod = (EODFit() & key).fetch1['fundamental']
-        period = 1/eod
+        period = 1 / eod
         baseline_spikes = (PUnitSimulations.BaselineSpikes() & key).fetch['times']
         isi = np.hstack((np.diff(r) for r in baseline_spikes))
         ax.hist(isi, bins=320, lw=0, color=sns.xkcd_rgb['charcoal grey'])
-        ax.set_xlim((0,20*period))
-        ax.set_xticks(np.arange(0,25,5)*period)
-        ax.set_xticklabels(np.arange(0,25,5))
+        ax.set_xlim((0, 20 * period))
+        ax.set_xticks(np.arange(0, 25, 5) * period)
+        ax.set_xticklabels(np.arange(0, 25, 5))
         ax.set_label('time [EOD cycles]')
 
 
+@schema
+@gitlog
+class RandomTrials(dj.Lookup):
+    definition = """
+    n_total                 : int # total number of trials
+    repeat_id               : int # repeat number
+    ---
+
+    """
+
+    class TrialSet(dj.Part):
+        definition = """
+        ->RandomTrials
+        new_trial_id            : int # index of the particular trial
+        ->Runs.SpikeTimes
+        ---
+        """
+
+    def _prepare(self):
+        lens = [len(self & dict(n_total=ntot)) == 10 for ntot in (100,)]
+        n_total = 100
+        if not np.all(lens):
+            ts = self.TrialSet()
+            data = (Runs() * Runs.SpikeTimes() & dict(contrast=20, cell_id="2014-12-03-ad",
+                                                      delta_f=-400)).project().fetch.as_dict()
+            data = list(sorted(data, key=lambda x: x['trial_id']))
+            n = len(data)
+            for repeat_id in range(10):
+                key = dict(n_total=n_total, repeat_id=repeat_id)
+                self.insert1(key)
+                for new_trial_id, trial_id in enumerate(np.random.randint(n, size=n_total)):
+                    key['new_trial_id'] = new_trial_id
+                    key.update(data[trial_id])
+                    ts.insert1(key)
+
+    def load_spikes(self, **key):
+        trials = ((LocalEODPeaksTroughs() * Runs.SpikeTimes() * RandomTrials.TrialSet()) & key)
+        dt = 1. / (Runs() & trials).fetch1['samplingrate']
+        eod, duration = (Runs() & trials).fetch1['eod', 'duration']
+        return [s / 1000 - p[0] * dt for s, p in zip(*trials.fetch['times', 'peaks'])], dt, eod, duration
+
+
+@schema
+@gitlog
+class PyramidalSimulationParameters(dj.Lookup):
+    definition = """
+    pyr_simul_id    : tinyint
+    ---
+    tau_synapse     : double    # time constant of the synapse
+    tau_neuron      : double    # time constant of the lif
+    n               : int       # how many trials to simulate
+    noisesd         : double    # noise standard deviation
+    amplitude       : double    # multiplicative factor on the input
+    offset          : double    # additive factor on the input
+    threshold       : double    # LIF threshold
+    reset           : double    # reset potential
+    jitter          : double    # random phase shift of the single trials will be Gaussian with jitter*eod_period
+    """
+
+    @property
+    def contents(self):
+        for i, jitter in enumerate(np.arange(0, .8, .1)):
+            yield dict(pyr_simul_id=i, tau_synapse=0.001, tau_neuron=0.01, n=1000, noisesd=5,
+                       amplitude=1.8, threshold=15, reset=0, offset=-20, jitter=jitter)
+
+
+@schema
+@gitlog
+class PyramidalLIF(dj.Computed):
+    definition = """
+    ->RandomTrials
+    ->PyramidalSimulationParameters
+    ---
+    vector_strength : double # resulting vector strength
+    """
+
+    def _make_tuples(self, key):
+        # load spike trains for randomly selected trials
+        data, dt, eod, duration = RandomTrials().load_spikes(**key)
+        eod_period = 1 / eod
+
+        # compute stimulus frequency
+        delta_f = np.unique((Runs() * RandomTrials() * RandomTrials.TrialSet() & key).fetch['delta_f'])
+        if len(delta_f) > 1:
+            raise ValueError('delta_f should be unique')
+        else:
+            delta_f = delta_f.squeeze()
+        stim_freq = eod + delta_f
+
+        # get parameters for simulation
+        params = (PyramidalSimulationParameters() & key).fetch1()
+        params.pop('pyr_simul_id')
+        print('Parameters', key)
+
+        # jitter spike times
+        jitter = params.pop('jitter')
+        phase_shifts = np.random.randn(len(data)) * eod_period * jitter
+        data2 = [d + ps for d, ps in zip(data, phase_shifts)]
+
+        # plot histogram of jittered data
+        fig, ax = plt.subplots()
+        ax.hist(np.hstack(data2) % (1/eod), label='jitter=%i' % jitter, bins=100)
+        fig.savefig('punitinput_jitter{0}.png'.format(jitter))
+        plt.close(fig)
+
+        # convolve with exponential filter
+        tau_s = params.pop('tau_synapse')
+        bins = np.arange(0, duration + dt, dt)
+        t = np.arange(0, 10 * tau_s, dt)
+        h = np.exp(-np.abs(t) / tau_s)
+        trials = np.vstack([np.convolve(np.histogram(sp, bins=bins)[0], h, 'full') for sp in data2])[:, :-len(h) + 1]
+
+        # simulate neuron
+        t = np.arange(0, duration, dt)
+        ret, V = simple_lif(t, trials.sum(axis=0), **params)
+        spikes = np.hstack(ret)
+        spikes %= 1 / stim_freq
+
+        key['vector_strength'] = circ.vector_strength(spikes*stim_freq*2*np.pi)
+        self.insert1(key)
+
+
+def simple_lif(t, I, n=10, offset=0, amplitude=1, noisesd=30, threshold=15, reset=0, tau_neuron=0.01):
+    dt = t[1] - t[0]
+
+    I = amplitude * I + offset
+
+    Vout = np.ones(n) * reset
+
+    ret = [list() for _ in range(n)]
+
+    sdB = np.sqrt(dt) * noisesd
+    V = np.zeros((n, len(I)))
+    for i, t_step in enumerate(t):
+        Vout += (-Vout + I[i]) * dt / tau_neuron + np.random.randn(n) * sdB
+        idx = Vout > threshold
+        for j in np.where(idx)[0]:
+            ret[j].append(t_step)
+        Vout[idx] = reset
+        V[:, i] = Vout
+    return ret, V
 
 
 if __name__ == '__main__':

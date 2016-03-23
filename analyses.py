@@ -322,7 +322,7 @@ class StimulusSpikeJitter(dj.Computed):
 
     @property
     def populated_from(self):
-        return Runs() & LocalEODPeaksTroughs() & dict(cell_type='p-unit')
+        return Runs() & LocalEODPeaksTroughs()
 
     def _make_tuples(self, key):
         print('Processing', key['cell_id'], 'run', key['run_id'], )
@@ -331,7 +331,6 @@ class StimulusSpikeJitter(dj.Computed):
         trials = ((LocalEODPeaksTroughs() * Runs.SpikeTimes()) & key)
 
         aggregated_spikes = np.hstack([s / 1000 - p[0] * dt for s, p in zip(*trials.fetch['times', 'peaks'])])
-        # aggregated_spikes = np.hstack([s['times'] / 1000 - p['peaks'][0] * dt for s, p in zip(st, pt)])
 
         aggregated_spikes %= 1 / eod
 
