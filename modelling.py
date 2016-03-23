@@ -616,7 +616,7 @@ class PyramidalSimulationParameters(dj.Lookup):
 
     @property
     def contents(self):
-        for i, jitter in enumerate(np.arange(0, .8, .1)):
+        for i, jitter in enumerate(np.arange(0, .9, .1)):
             yield dict(pyr_simul_id=i, tau_synapse=0.001, tau_neuron=0.01, n=1000, noisesd=5,
                        amplitude=1.8, threshold=15, reset=0, offset=-20, jitter=jitter)
 
@@ -675,6 +675,22 @@ class PyramidalLIF(dj.Computed):
 
         key['vector_strength'] = circ.vector_strength(spikes*stim_freq*2*np.pi)
         self.insert1(key)
+
+    def plot_vector_strength(self):
+        eod = np.unique((Runs() * RandomTrials() * RandomTrials.TrialSet() & self).fetch['eod']).squeeze()
+        assert len(eod.shape) == 0, "EOD should be unique"
+        df = pd.DataFrame((self*PyramidalSimulationParameters()).fetch())
+        df['sigma'] = df.jitter / eod * 1000
+        with sns.axes_style("whitegrid"):
+            sns.violinplot('sigma','vector_strength', color='steelblue', data=df, cut=0)
+        ax = plt.gca()
+        ax.set_xlabel(r'$\sigma$ [ms]')
+        ax.set_ylabel('vector strength')
+        ax.set_ylim((0,1))
+
+        ax.set_xticklabels(['%.2f' % e for e in np.unique(df.sigma)])
+        # sns.despine(plt.gcf(), trim=True, offset=5)
+        return plt.gcf(), ax
 
 
 def simple_lif(t, I, n=10, offset=0, amplitude=1, noisesd=30, threshold=15, reset=0, tau_neuron=0.01):
