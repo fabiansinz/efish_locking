@@ -72,7 +72,7 @@ ax[2].text(-0.1, 1, 'C', transform=ax[2].transAxes, fontweight='bold')
 
 
 fig.tight_layout()
-fig.savefig('figures/figure03pyramidals.pdf')
+fig.savefig('figures/poster/figure03pyramidals.pdf')
 
 
 #glm = smf.glm('vector_strength ~ frequency * jitter + contrast', data=df, family=sm.families.Gamma()).fit()
