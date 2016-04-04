@@ -1,10 +1,8 @@
-from schemata import *
-from analyses import *
 import matplotlib.pyplot as plt
 import statsmodels.api as sm
 import statsmodels.formula.api as smf
-import seaborn as sns
-import numpy as np
+
+from locking.analyses import *
 
 rel = Runs()*SecondOrderSignificantPeaks()*StimulusSpikeJitter()*Cells() \
                    & dict(eod_coeff=0, baseline_coeff=0, refined=1,\

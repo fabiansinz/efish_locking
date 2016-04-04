@@ -1,5 +1,6 @@
-import modelling as mod
 import seaborn as sns
+
+from locking import modelling as mod
 
 sns.set_context('poster')
 fig, ax = mod.PyramidalLIF().plot_vector_strength()

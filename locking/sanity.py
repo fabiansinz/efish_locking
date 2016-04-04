@@ -1,11 +1,11 @@
-from itertools import repeat
+from pandas import DataFrame
+
 import datajoint as dj
 from datajoint import schema
-from pandas import DataFrame
-from analyses import FirstOrderSignificantPeaks, SecondOrderSignificantPeaks
-from schemata import Runs, LocalEODPeaksTroughs, GlobalEFieldPeaksTroughs
+from locking.analyses import FirstOrderSignificantPeaks, SecondOrderSignificantPeaks
+from locking.data import Runs, LocalEODPeaksTroughs, GlobalEFieldPeaksTroughs
 
-server = schema('efish_locking', locals())
+server = schema('efish_tests', locals())
 import numpy as np
 import unittest
 

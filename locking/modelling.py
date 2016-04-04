@@ -1,18 +1,20 @@
-import pandas as pd
-from scipy.integrate import odeint
-import datajoint as dj
-from datajoint import schema
-import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
-from djaddon import gitlog
-from schemata import EFishes, peakdet, Runs, Cells, LocalEODPeaksTroughs
 import warnings
-from scipy.signal import butter, filtfilt
-import pycircstat as circ
-from scipy import stats
 
-schema = schema('efish_locking', locals())
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import seaborn as sns
+from scipy import stats
+from scipy.integrate import odeint
+from scipy.signal import butter, filtfilt
+
+import datajoint as dj
+import pycircstat as circ
+import datajoint as dj
+from djaddon import gitlog
+from locking.data import peakdet, Runs, Cells, LocalEODPeaksTroughs
+
+schema = dj.schema('efish_modelling', locals())
 
 
 def second_order_critical_vector_strength(spikes, alpha=0.001):
@@ -656,7 +658,7 @@ class PyramidalLIF(dj.Computed):
 
         # plot histogram of jittered data
         fig, ax = plt.subplots()
-        ax.hist(np.hstack(data2) % (1/eod), label='jitter=%i' % jitter, bins=100)
+        ax.hist(np.hstack(data2) % (1 / eod), label='jitter=%i' % jitter, bins=100)
         fig.savefig('punitinput_jitter{0}.png'.format(jitter))
         plt.close(fig)
 
@@ -673,20 +675,20 @@ class PyramidalLIF(dj.Computed):
         spikes = np.hstack(ret)
         spikes %= 1 / stim_freq
 
-        key['vector_strength'] = circ.vector_strength(spikes*stim_freq*2*np.pi)
+        key['vector_strength'] = circ.vector_strength(spikes * stim_freq * 2 * np.pi)
         self.insert1(key)
 
     def plot_vector_strength(self):
         eod = np.unique((Runs() * RandomTrials() * RandomTrials.TrialSet() & self).fetch['eod']).squeeze()
         assert len(eod.shape) == 0, "EOD should be unique"
-        df = pd.DataFrame((self*PyramidalSimulationParameters()).fetch())
+        df = pd.DataFrame((self * PyramidalSimulationParameters()).fetch())
         df['sigma'] = df.jitter / eod * 1000
         with sns.axes_style("whitegrid"):
-            sns.violinplot('sigma','vector_strength', color='steelblue', data=df, cut=0)
+            sns.violinplot('sigma', 'vector_strength', color='steelblue', data=df, cut=0)
         ax = plt.gca()
         ax.set_xlabel(r'$\sigma$ [ms]')
         ax.set_ylabel('vector strength')
-        ax.set_ylim((0,1))
+        ax.set_ylim((0, 1))
 
         ax.set_xticklabels(['%.2f' % e for e in np.unique(df.sigma)])
         # sns.despine(plt.gcf(), trim=True, offset=5)

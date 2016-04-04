@@ -1,13 +1,10 @@
-import os
-from matplotlib import pyplot
-import seaborn
-from datajoint.utils import user_choice
-from figure01 import generate_filename
-from plot_settings import params as plot_params
 import matplotlib.pyplot as plt
 from numpy.fft import fft, fftfreq, fftshift
-from analyses import *
-from schemata import *
+
+from locking.analyses import *
+from locking.data import *
+from plot_settings import params as plot_params
+
 
 def generate_filename(cell, contrast):
     dir = 'figures/figure02/%s/' % (cell['cell_type'], )

@@ -1,24 +1,23 @@
-import pandas as pd
 import functools
 import itertools
-import pymysql
-from scipy import stats
-import datajoint as dj
-from datajoint import schema
-import sympy
-
-from djaddon import gitlog
-from helpers import mkdir
-from schemata import Runs, GlobalEFieldPeaksTroughs, peakdet, Cells, LocalEODPeaksTroughs, Baseline
-import numpy as np
-from pycircstat import event_series as es
-import pycircstat as circ
-from scipy import optimize
-import matplotlib.pyplot as plt
-import seaborn as sns
 from collections import OrderedDict
 
-server = schema('efish_locking', locals())
+import numpy as np
+import pandas as pd
+import pymysql
+import seaborn as sns
+import sympy
+from scipy import optimize
+from scipy import stats
+
+import datajoint as dj
+import pycircstat as circ
+from datajoint import schema
+from djaddon import gitlog
+from locking.data import Runs, GlobalEFieldPeaksTroughs, peakdet, Cells, LocalEODPeaksTroughs, Baseline
+from pycircstat import event_series as es
+
+server = schema('efish_analyses', locals())
 
 
 def compute_1st_order_spectrum(aggregated_spikes, sampling_rate, alpha=0.001):
@@ -709,8 +708,6 @@ class EODStimulusPSTSpikes(dj.Computed):
 
 
 if __name__ == "__main__":
-    import time
-
     # time.sleep(np.random.rand() * 10)
     # foss = FirstOrderSpikeSpectra()
     # foss.populate(reserve_jobs=True)

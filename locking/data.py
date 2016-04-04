@@ -1,17 +1,18 @@
 import os
 import re
 import datajoint as dj
-from datajoint import schema
+import datajoint as dj
 import sys
 import yaml
 import seaborn as sns
 
 BASEDIR = '/home/fabee/data/carolin/'
-server = schema('efish_locking', locals())
+schema = dj.schema('efish_data', locals())
 from pyrelacs.DataClasses import load
 import numpy as np
 from pint import UnitRegistry
 import pycircstat as circ
+
 ureg = UnitRegistry()
 
 
@@ -146,7 +147,7 @@ def load_traces(relacsdir, stimuli):
     return {e['trace_data']: e for e in ret}
 
 
-@server
+@schema
 class PaperCells(dj.Lookup):
     definition = """
     # What cell ids make it into the paper
@@ -198,7 +199,7 @@ class PaperCells(dj.Lookup):
                 {'cell_id': '2014-12-11-aa-invivo-1'}]
 
 
-@server
+@schema
 class EFishes(dj.Imported):
     definition = """
     # Basics weakly electric fish subject info
@@ -226,7 +227,7 @@ class EFishes(dj.Imported):
         self.insert1(key)
 
 
-@server
+@schema
 class Cells(dj.Imported):
     definition = """
     # Recorded cell with additional info
@@ -256,7 +257,7 @@ class Cells(dj.Imported):
         self.insert1(dat)
 
 
-@server
+@schema
 class FICurves(dj.Imported):
     definition = """
     # FI  Curves from recorded cells
@@ -308,7 +309,7 @@ class FICurves(dj.Imported):
         ax.set_xticks(np.round([mi, (ma + mi) * .5, ma], decimals=1))
 
 
-@server
+@schema
 class ISIHistograms(dj.Imported):
     definition = """
     # ISI Histograms
@@ -347,7 +348,8 @@ class ISIHistograms(dj.Imported):
         ax.bar(eod_cycles, p, width=dt, color=sns.xkcd_rgb['charcoal grey'], lw=0)
         ax.set_xlabel('EOD cycles')
 
-@server
+
+@schema
 class Baseline(dj.Imported):
     definition = """
     # table holding baseline recordings
@@ -391,32 +393,29 @@ class Baseline(dj.Imported):
         rel = self & restrictions
         spikes = (Baseline.SpikeTimes() & rel).fetch1['times']
         eod = rel.fetch1['eod']
-        period = 1/eod
+        period = 1 / eod
         factor = 2 * np.pi / period
         t = (spikes % period)
-        mu = circ.mean(t * factor)/factor
-        sigma2 = circ.var(t * factor) / factor**2
+        mu = circ.mean(t * factor) / factor
+        sigma2 = circ.var(t * factor) / factor ** 2
         return mu, sigma2
 
     def plot_psth(self, ax, restrictions):
-        spikes = (Baseline.SpikeTimes() & restrictions & dict(repeat=0)).fetch1['times'] / 1000 # convert to s
+        spikes = (Baseline.SpikeTimes() & restrictions & dict(repeat=0)).fetch1['times'] / 1000  # convert to s
 
         eod, sampling_rate = (self & restrictions).fetch1['eod', 'samplingrate']
         if (Baseline.LocalEODPeaksTroughs() & restrictions):
             spikes -= (Baseline.LocalEODPeaksTroughs() & restrictions).fetch1['peaks'][0] / sampling_rate
 
-        period = 1/eod
+        period = 1 / eod
         t = (spikes % period)
         ax.hist(t, bins=50, color='silver', lw=0, normed=True)
-        ax.set_xlim((0,period))
-        ax.set_xlabel('EOD cycle',labelpad=-5)
-        ax.set_xticks([0,  period])
+        ax.set_xlim((0, period))
+        ax.set_xlabel('EOD cycle', labelpad=-5)
+        ax.set_xticks([0, period])
         ax.set_xticklabels([0, 1])
         ax.set_ylabel('PSTH')
         ax.set_yticks([])
-
-
-
 
     def _make_tuples(self, key):
         repro = 'BaselineActivity'
@@ -431,7 +430,6 @@ class Baseline(dj.Imported):
 
             localeod = Baseline.LocalEODPeaksTroughs()
             spike_table = Baseline.SpikeTimes()
-
 
             for run_idx, (spi_d, spi_m) in enumerate(zip(spi_data, spi_meta)):
                 print("\t%s repeat %i" % (repro, run_idx))
@@ -452,7 +450,6 @@ class Baseline(dj.Imported):
                     if stim_d == [[[0]]]:
                         print("\t\tEmpty stimuli data! Continuing ...")
                         continue
-
 
                     for d in stim_d[0]:
                         if not d[signal_column].startswith('FileStimulus-value'):
@@ -481,8 +478,6 @@ class Baseline(dj.Imported):
 
                 duration = ureg.parse_expression(spi_m['duration']).to(time_unit).magnitude
 
-
-
                 start_idx, stop_idx = [], []
                 # start_times, stop_times = [], []
 
@@ -508,10 +503,10 @@ class Baseline(dj.Imported):
                     else:
                         print("Negative indices in stimuli.dat. Skipping local peak extraction!")
 
-
                     spike_table.insert1(dict(key, times=spi_d, repeat=spi_m['index']), replace=True)
 
-@server
+
+@schema
 class Runs(dj.Imported):
     definition = """
     # table holding trials
@@ -699,7 +694,7 @@ class Runs(dj.Imported):
                     spike_table.insert1(tmp, replace=True)
 
 
-@server
+@schema
 class GlobalEFieldPeaksTroughs(dj.Computed):
     definition = """
     # table for peaks and troughs in the global efield
@@ -719,7 +714,7 @@ class GlobalEFieldPeaksTroughs(dj.Computed):
         self.insert1(key)
 
 
-@server
+@schema
 class LocalEODPeaksTroughs(dj.Computed):
     definition = """
     # table for peaks and troughs in local EOD

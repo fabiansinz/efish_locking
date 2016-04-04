@@ -1,13 +1,8 @@
-from matplotlib import pyplot
-import numpy
-import seaborn
+from locking.data import ISIHistograms, FICurves
 from plot_settings import params as plot_params
-import matplotlib.pyplot as plt
-
-from schemata import ISIHistograms, FICurves
 # mpl.use('Agg')      # With this line = figure disappears; without this line = warning
 
-from analyses import *
+from locking.analyses import *
 
 
 def generate_filename(cell, contrast, base='firstorderspectra'):

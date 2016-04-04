@@ -1,9 +1,9 @@
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
-from analyses import SecondOrderSpikeSpectra
-from helpers import mkdir
-from modelling import *
-from schemata import *
-import matplotlib.pyplot as plt
+
+from locking import mkdir
+from locking.analyses import SecondOrderSpikeSpectra
+from locking.data import *
+from locking.modelling import *
 from plot_settings import params as plot_params
 
 

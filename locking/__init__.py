@@ -1,7 +1,5 @@
 import os
 
-__author__ = 'fabee'
-
 
 def mkdir(newdir):
     if os.path.isdir(newdir):
