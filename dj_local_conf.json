@@ -3,7 +3,7 @@
     "loglevel": "ERROR",
     "connection.init_function": null,
     "safemode": true,
-    "display.width": 14,
+    "display.width": 20,
     "database.host": "dragon",
     "database.user": "efish",
     "database.password": "chop$fish",

@@ -1,3 +1,5 @@
+import abc
+
 params = {'axes.labelsize': 7,
           'axes.labelpad': 1.0,
           'axes.titlesize': 7,
@@ -25,6 +27,32 @@ params = {'axes.labelsize': 7,
           'text.usetex': False,
           'figure.dpi': 300,
           'figure.facecolor': 'w',
-}
+          }
 
 
+class FormatedFigure:
+    def __init__(self, filename=None):
+        self.filename = filename
+
+    @abc.abstractmethod
+    def prepare(self):
+        pass
+
+    def __enter__(self):
+        self.prepare()
+        return self.fig, self.ax
+
+    def format_figure(self):
+        pass
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        for k, ax in self.ax.items():
+            if hasattr(self, 'format_' + k):
+                getattr(self, 'format_' + k)(ax)
+
+        self.format_figure()
+        if self.filename is not None:
+            self.fig.savefig(self.filename)
+
+    def __call__(self, *args, **kwargs):
+        return self

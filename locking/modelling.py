@@ -678,13 +678,13 @@ class PyramidalLIF(dj.Computed):
         key['vector_strength'] = circ.vector_strength(spikes * stim_freq * 2 * np.pi)
         self.insert1(key)
 
-    def plot_vector_strength(self):
+    def plot_vector_strength(self, **kwargs):
         eod = np.unique((Runs() * RandomTrials() * RandomTrials.TrialSet() & self).fetch['eod']).squeeze()
         assert len(eod.shape) == 0, "EOD should be unique"
         df = pd.DataFrame((self * PyramidalSimulationParameters()).fetch())
         df['sigma'] = df.jitter / eod * 1000
-        with sns.axes_style("whitegrid"):
-            sns.violinplot('sigma', 'vector_strength', color='steelblue', data=df, cut=0)
+        sns.violinplot('sigma', 'vector_strength',  data=df, **kwargs)
+
         ax = plt.gca()
         ax.set_xlabel(r'$\sigma$ [ms]')
         ax.set_ylabel('vector strength')
