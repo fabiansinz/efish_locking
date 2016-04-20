@@ -1,6 +1,7 @@
 import matplotlib.pyplot as plt
 from numpy.fft import fft, fftfreq, fftshift
 
+from locking import mkdir
 from locking.analyses import *
 from locking.data import *
 from plot_settings import params as plot_params

@@ -156,9 +156,6 @@ class PaperCells(dj.Lookup):
     ---
     """
 
-    def __init__(self):
-        dj.Lookup.__init__(self)
-
     contents = [{'cell_id': '2014-12-03-al'},
                 {'cell_id': '2014-07-23-ae'},
                 {'cell_id': '2014-12-11-ae-invivo-1'},
@@ -345,7 +342,8 @@ class ISIHistograms(dj.Imported):
         except dj.DataJointError:
             return
         dt = eod_cycles[1] - eod_cycles[0]
-        ax.bar(eod_cycles, p, width=dt, color=sns.xkcd_rgb['charcoal grey'], lw=0)
+        idx = eod_cycles <= 15
+        ax.bar(eod_cycles[idx], p[idx], width=dt, color=sns.xkcd_rgb['charcoal grey'], lw=0)
         ax.set_xlabel('EOD cycles')
 
 
@@ -354,7 +352,7 @@ class Baseline(dj.Imported):
     definition = """
     # table holding baseline recordings
     ->Cells
-    repeat                     : int # index of the run
+    repeat                  : int # index of the run
 
     ---
     eod                     : float # eod rate at trial in Hz
@@ -401,7 +399,8 @@ class Baseline(dj.Imported):
         return mu, sigma2
 
     def plot_psth(self, ax, restrictions):
-        spikes = (Baseline.SpikeTimes() & restrictions & dict(repeat=0)).fetch1['times'] / 1000  # convert to s
+        minimum_rep = (Baseline.SpikeTimes() & restrictions).fetch['repeat'].min()
+        spikes = (Baseline.SpikeTimes() & restrictions & dict(repeat=minimum_rep)).fetch1['times'] / 1000  # convert to s
 
         eod, sampling_rate = (self & restrictions).fetch1['eod', 'samplingrate']
         if (Baseline.LocalEODPeaksTroughs() & restrictions):

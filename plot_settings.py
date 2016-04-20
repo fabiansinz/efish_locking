@@ -1,4 +1,5 @@
 import abc
+import matplotlib.pyplot as plt
 
 params = {'axes.labelsize': 7,
           'axes.labelpad': 1.0,
@@ -53,6 +54,7 @@ class FormatedFigure:
         self.format_figure()
         if self.filename is not None:
             self.fig.savefig(self.filename)
+        plt.close(self.fig)
 
     def __call__(self, *args, **kwargs):
         return self

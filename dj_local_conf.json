@@ -4,8 +4,8 @@
     "connection.init_function": null,
     "safemode": true,
     "display.width": 20,
-    "database.host": "dragon",
-    "database.user": "efish",
-    "database.password": "chop$fish",
+    "database.host": "localhost",
+    "database.user": "fabee",
+    "database.password": "mouse123",
     "database.port": 3306
 }

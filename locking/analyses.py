@@ -201,13 +201,11 @@ class PlotableSpectrum:
     def plot(self, ax, restrictions, f_max=2000):
         sns.set_context('paper')
         # colors = ['#1b9e77', '#d95f02', '#7570b3', '#e7298a']
-        colors = ['deeppink', 'dodgerblue', '#7570b3', 'black']
+        colors = ['deeppink', 'dodgerblue', sns.xkcd_rgb['mustard'], sns.xkcd_rgb['steel grey']]
 
         stim, eod, baseline, beat = sympy.symbols('f_s, f_e, f_b, \Delta')
 
         for fos in ((self * Runs()).project() & restrictions).fetch.as_dict:
-            print("Processing %(cell_id)s %(run_id)i" % fos)
-
             if isinstance(self, FirstOrderSpikeSpectra):
                 peaks = (FirstOrderSignificantPeaks() & fos & restrictions)
             elif isinstance(self, SecondOrderSpikeSpectra):
@@ -304,6 +302,7 @@ class FirstOrderSpikeSpectra(dj.Computed, PlotableSpectrum):
         vs = key['vector_strengths']
         vs[np.isnan(vs)] = 0
         self.insert1(key)
+
 
 @server
 @gitlog
@@ -678,30 +677,40 @@ class EODStimulusPSTSpikes(dj.Computed):
 
         if len(df) > 0:
             whs = df.window_half_size.mean()
-            # eod = df.eod_frequency.mean()
-            y = []
+            db = 2 * whs / 400
+            bins = np.arange(-whs, whs + db, db)
+            g = np.exp(-np.linspace(-whs, whs, len(bins) - 1) ** 2 / 2 / (whs / 25) ** 2)
+            bin_centers = 0.5 * (bins[1:] + bins[:-1])
+            y = [0]
             yticks = []
-            old = np.Inf
-            for i, (sp, del_f) in enumerate(zip(df.spikes, df.delta_f)):
-                if del_f != old:
-                    y.append(i)
-                    old = del_f
-                    yticks.append(del_f)
-                ax.plot(sp, 0 * sp + i, '.k', mfc='k', ms=.5, zorder=-10, rasterized=False)
-            y.append(i)
+            i = 0
+            for (adf, sdf), dgr in df.groupby(['adelta_f', 'sdelta_f'], sort=True):
+                delta_f = adf * sdf
+                yticks.append(delta_f)
+
+                h, _ = np.histogram(np.hstack(dgr.spikes), bins=bins)
+
+                for sp in dgr.spikes:
+                    ax.plot(sp, 0 * sp + i, '.k', mfc='k', ms=.5, zorder=-10, rasterized=False)
+                    i += 1
+                y.append(i)
+                h = np.convolve(h, g, mode='same')
+                h *= (y[-1] - y[-2]) / h.max()
+                ax.fill_between(bin_centers, 0 * h + y[-2], h + y[-2], color='silver', zorder=-20)
+
             y = np.asarray(y)
 
             ax.set_xlim((-whs, whs))
             ax.set_xticks([-whs, -whs / 2, 0, whs / 2, whs])
 
-            # ax.set_xticklabels(['-10 EOD', '0', '10 EOD'])
             ax.set_xticklabels([-10, -5, 0, 5, 10])
-            # ax.set_xlabel('EOD cycles')
             ax.set_ylabel(r'$\Delta f$')
             ax.tick_params(axis='y', length=0, width=0, which='major')
 
-            for y_from, y_to in zip(y[::2], y[1::2]):
-                ax.fill_between([-whs, whs], [y_from, y_from], [y_to, y_to], color='gainsboro', zorder=-20)
+            # for y_from, y_to, period in zip(y[:-1], y[1:], periods):
+            #     for x in np.arange(-whs, whs, 2 * period):
+            #         ax.fill_between([x, x + period], [y_from, y_from], [y_to, y_to], color='gainsboro', zorder=-20)
+            #         # ax.fill_between([-whs, whs], [y_from, y_from], [y_to, y_to], color='gainsboro', zorder=-20)
             ax.set_yticks(0.5 * (y[1:] + y[:-1]))
             ax.set_yticklabels(yticks)
             ax.set_ylim(y[[0, -1]])
