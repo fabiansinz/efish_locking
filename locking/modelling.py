@@ -620,6 +620,7 @@ class RandomTrials(dj.Lookup):
         trials = ((LocalEODPeaksTroughs() * Runs.SpikeTimes() * RandomTrials.TrialSet() * Phases) & key)
 
         dt = 1. / (Runs() & trials).fetch1['samplingrate']
+
         eod, duration = (Runs() & trials).fetch1['eod', 'duration']
         rad2period = 1 / 2 / np.pi / eod
         # get spikes, convert to s, align to EOD, add bootstrapped phase
@@ -644,7 +645,7 @@ class PyramidalSimulationParameters(dj.Lookup):
     """
 
     contents = [
-        dict(pyr_simul_id=0, tau_synapse=0.001, tau_neuron=0.01, n=1000, noisesd=30,
+        dict(pyr_simul_id=0, tau_synapse=0.001, tau_neuron=0.01, n=50, noisesd=30,
              amplitude=1.7, threshold=15, reset=0, offset=-20),
     ]
 
@@ -668,10 +669,11 @@ class PyramidalLIF(dj.Computed):
         """
 
     def _make_tuples(self, key):
+        key0 = dict(key)
         for centered in [True, False]:
             # load spike trains for randomly selected trials
-            data, dt, eod, duration = RandomTrials().load_spikes(key, centered=centered)
-            key['centered'] = centered
+            data, dt, eod, duration = RandomTrials().load_spikes(key0, centered=centered)
+            key = dict(key0, centered=centered)
 
             eod_period = 1 / eod
 
@@ -723,6 +725,7 @@ class PyramidalLIF(dj.Computed):
                 key['simul_trial_id'] = i
                 key['times'] = np.asarray(trial)
                 st.insert1(key)
+
 
 
 def simple_lif(t, I, n=10, offset=0, amplitude=1, noisesd=30, threshold=15, reset=0, tau_neuron=0.01):
