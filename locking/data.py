@@ -1303,3 +1303,22 @@ class CenteredPUnitPhases(dj.Lookup):
             df['jitter'] =  [circ.std(ph) for ph in df.phases]
             self.insert([e.to_dict() for _, e in df.ix[:, ('fish_id', 'cell_id', 'phase','jitter')].iterrows()],
                         skip_duplicates=True)
+
+@schema
+class UncenteredPUnitPhases(dj.Lookup):
+    definition = """
+    # EOD phases of spike times centered on phase mean of each fish to account for length
+
+    ->PUnitPhases
+    ---
+    phase       : float # phase
+    jitter      : float # circular std of each cell
+    """
+
+    def _prepare(self):
+        if len(PUnitPhases()) != len(self):
+            df = pd.DataFrame(PUnitPhases().fetch())
+            df['phase'] = [circ.mean(e) for e in df.phases]
+            df['jitter'] =  [circ.std(ph) for ph in df.phases]
+            self.insert([e.to_dict() for _, e in df.ix[:, ('fish_id', 'cell_id', 'phase','jitter')].iterrows()],
+                        skip_duplicates=True)

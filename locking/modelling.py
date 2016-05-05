@@ -12,7 +12,7 @@ import datajoint as dj
 import pycircstat as circ
 import datajoint as dj
 from djaddon import gitlog
-from locking.data import peakdet, Runs, Cells, LocalEODPeaksTroughs, CenteredPUnitPhases
+from locking.data import peakdet, Runs, Cells, LocalEODPeaksTroughs, CenteredPUnitPhases, UncenteredPUnitPhases, EFishes
 
 schema = dj.schema('efish_modelling', locals())
 
@@ -575,12 +575,20 @@ class RandomTrials(dj.Lookup):
         ---
         """
 
-    class PhaseSet(dj.Part):
+    class CenterPhaseSet(dj.Part):
         definition = """
         ->RandomTrials
         new_trial_id       : int   # index of the phase sample
         ---
-        ->CenteredPUnitPhases
+        ->EFishes
+        """
+
+    class UncenterPhaseSet(dj.Part):
+        definition = """
+        ->RandomTrials
+        new_trial_id       : int   # index of the phase sample
+        ---
+        ->EFishes
         """
 
     def _prepare(self):
@@ -592,10 +600,12 @@ class RandomTrials(dj.Lookup):
             data = list(sorted(data, key=lambda x: x['trial_id']))
             n = len(data)
 
-            df = pd.DataFrame(CenteredPUnitPhases().fetch[dj.key])
+            df_center = pd.DataFrame(CenteredPUnitPhases().fetch[dj.key])
+            df_uncenter = pd.DataFrame(UncenteredPUnitPhases().fetch[dj.key])
 
             ts = self.TrialSet()
-            ps = self.PhaseSet()
+            cps = self.CenterPhaseSet()
+            ups = self.UncenterPhaseSet()
 
             for repeat_id in range(10):
                 key = dict(n_total=n_total, repeat_id=repeat_id)
@@ -606,16 +616,26 @@ class RandomTrials(dj.Lookup):
                     ts.insert1(key)
 
                 key = dict(n_total=n_total, repeat_id=repeat_id)
-                for new_trial_id, ix in enumerate(np.random.randint(len(df), size=n_total)):
+                for new_trial_id, ix in enumerate(np.random.randint(len(df_center), size=n_total)):
                     key['new_trial_id'] = new_trial_id
-                    key.update(df.iloc[ix].to_dict())
-                    ps.insert1(key)
+                    key.update(df_center.iloc[ix].to_dict())
+                    cps.insert1(key)
 
-    def load_spikes(self, **key):
-        trials = ((LocalEODPeaksTroughs() * Runs.SpikeTimes() * RandomTrials.TrialSet()) & key)
+                    key.update(df_uncenter.iloc[ix].to_dict())
+                    ups.insert1(key)
+
+    def load_spikes(self, key, centered=True):
+        trials = ((LocalEODPeaksTroughs() * Runs.SpikeTimes() \
+                   * RandomTrials.TrialSet() \
+                   * (RandomTrials.PhaseSet() * CenteredPUnitPhases()).project('phase', phase_cell='cell_id')) & key)
+
         dt = 1. / (Runs() & trials).fetch1['samplingrate']
         eod, duration = (Runs() & trials).fetch1['eod', 'duration']
-        return [s / 1000 - p[0] * dt for s, p in zip(*trials.fetch['times', 'peaks'])], dt, eod, duration
+        rad2period = 1 / 2 / np.pi / eod
+        # get spikes, convert to s, align to EOD, add bootstrapped phase
+
+        spikes = [s / 1000 - p[0] * dt + ph * rad2period for s, p, ph in zip(*trials.fetch['times', 'peaks', 'phase'])]
+        return spikes, dt, eod, duration
 
 
 @schema
@@ -635,8 +655,8 @@ class PyramidalSimulationParameters(dj.Lookup):
     """
 
     contents = [
-        dict(pyr_simul_id=0, tau_synapse=0.001, tau_neuron=0.01, n=1000, noisesd=5,
-             amplitude=1.8, threshold=15, reset=0, offset=-20),
+        dict(pyr_simul_id=0, tau_synapse=0.001, tau_neuron=0.01, n=1000, noisesd=30,
+             amplitude=1.7, threshold=15, reset=0, offset=-20),
     ]
 
 
@@ -646,71 +666,74 @@ class PyramidalLIF(dj.Computed):
     definition = """
     ->RandomTrials
     ->PyramidalSimulationParameters
+    centered        : bool  # whether the phases got centered per fish
     ---
-    vector_strength : double # resulting vector strength
     """
 
+    class SpikeTimes(dj.Part):
+        definition = """
+        ->PyramidalLIF
+        simul_trial_id  :   smallint # trial number
+        ---
+        times           : longblob  # spike times in s
+        """
+
     def _make_tuples(self, key):
-        # load spike trains for randomly selected trials
-        data, dt, eod, duration = RandomTrials().load_spikes(**key)
-        eod_period = 1 / eod
+        for centered in [True, False]:
+            # load spike trains for randomly selected trials
+            data, dt, eod, duration = RandomTrials().load_spikes(key, centered=centered)
+            key['centered'] = centered
 
-        # compute stimulus frequency
-        delta_f = np.unique((Runs() * RandomTrials() * RandomTrials.TrialSet() & key).fetch['delta_f'])
-        if len(delta_f) > 1:
-            raise ValueError('delta_f should be unique')
-        else:
-            delta_f = delta_f.squeeze()
-        stim_freq = eod + delta_f
+            eod_period = 1 / eod
 
-        # get parameters for simulation
-        params = (PyramidalSimulationParameters() & key).fetch1()
-        params.pop('pyr_simul_id')
-        print('Parameters', key)
+            # compute stimulus frequency
+            delta_f = np.unique((Runs() * RandomTrials() * RandomTrials.TrialSet() & key).fetch['delta_f'])
+            if len(delta_f) > 1:
+                raise ValueError('delta_f should be unique')
+            else:
+                delta_f = delta_f.squeeze()
+            stim_freq = eod + delta_f
 
-        # jitter spike times
-        jitter = params.pop('jitter')
-        phase_shifts = np.random.randn(len(data)) * eod_period * jitter
-        data2 = [d + ps for d, ps in zip(data, phase_shifts)]
+            # get parameters for simulation
+            params = (PyramidalSimulationParameters() & key).fetch1()
+            params.pop('pyr_simul_id')
+            print('Parameters', key)
 
-        # plot histogram of jittered data
-        fig, ax = plt.subplots()
-        ax.hist(np.hstack(data2) % (1 / eod), label='jitter=%i' % jitter, bins=100)
-        fig.savefig('punitinput_jitter{0}.png'.format(jitter))
-        plt.close(fig)
+            # plot histogram of jittered data
+            fig, ax = plt.subplots()
+            ax.hist(np.hstack(data) % (1 / eod), bins=100)
+            fig.savefig('punitinput_{repeat_id}_{centered}.png'.format(**key))
+            plt.close(fig)
 
-        # convolve with exponential filter
-        tau_s = params.pop('tau_synapse')
-        bins = np.arange(0, duration + dt, dt)
-        t = np.arange(0, 10 * tau_s, dt)
-        h = np.exp(-np.abs(t) / tau_s)
-        trials = np.vstack([np.convolve(np.histogram(sp, bins=bins)[0], h, 'full') for sp in data2])[:, :-len(h) + 1]
+            # convolve with exponential filter
+            tau_s = params.pop('tau_synapse')
+            bins = np.arange(0, duration + dt, dt)
+            t = np.arange(0, 10 * tau_s, dt)
+            h = np.exp(-np.abs(t) / tau_s)
+            trials = np.vstack([np.convolve(np.histogram(sp, bins=bins)[0], h, 'full') for sp in data])[:, :-len(h) + 1]
 
-        # simulate neuron
-        t = np.arange(0, duration, dt)
-        ret, V = simple_lif(t, trials.sum(axis=0),
-                            **params)  # TODO make that mean to be independent of number of neurons
-        spikes = np.hstack(ret)
-        spikes %= 1 / stim_freq
+            # simulate neuron
+            t = np.arange(0, duration, dt)
+            ret, V = simple_lif(t, trials.sum(axis=0),
+                                **params)  # TODO make that mean to be independent of number of neurons
 
-        key['vector_strength'] = circ.vector_strength(spikes * stim_freq * 2 * np.pi)
-        self.insert1(key)
+            isi = [np.diff(r) for r in ret]
+            fig, ax = plt.subplots()
+            ax.hist(np.hstack(isi), bins=100)
+            ax.set_xticks(eod_period * np.arange(0, 50, 10))
+            ax.set_xticklabels(np.arange(0, 50, 10))
+            fig.savefig('pyr_isi_{repeat_id}_{centered}.png'.format(**key))
+            plt.close(fig)
 
-    def plot_vector_strength(self, **kwargs):
-        eod = np.unique((Runs() * RandomTrials() * RandomTrials.TrialSet() & self).fetch['eod']).squeeze()
-        assert len(eod.shape) == 0, "EOD should be unique"
-        df = pd.DataFrame((self * PyramidalSimulationParameters()).fetch())
-        df['sigma'] = df.jitter / eod * 1000
-        sns.violinplot('sigma', 'vector_strength', data=df, **kwargs)
+            sisi = np.hstack(isi)
+            print('Firing rates (min, max, avg)', (1 / sisi).min(), (1 / sisi).max(), np.mean([len(r) for r in ret]))
 
-        ax = plt.gca()
-        ax.set_xlabel(r'$\sigma$ [ms]')
-        ax.set_ylabel('vector strength')
-        ax.set_ylim((0, 1))
-
-        ax.set_xticklabels(['%.2f' % e for e in np.unique(df.sigma)])
-        # sns.despine(plt.gcf(), trim=True, offset=5)
-        return plt.gcf(), ax
+            self.insert1(key)
+            st = self.SpikeTimes()
+            for i, trial in enumerate(ret):
+                key['simul_trial_id'] = i
+                key['times'] = trial
+                st.insert1(key)
 
 
 def simple_lif(t, I, n=10, offset=0, amplitude=1, noisesd=30, threshold=15, reset=0, tau_neuron=0.01):
