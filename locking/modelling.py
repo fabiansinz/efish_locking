@@ -721,7 +721,7 @@ class PyramidalLIF(dj.Computed):
             st = self.SpikeTimes()
             for i, trial in enumerate(ret):
                 key['simul_trial_id'] = i
-                key['times'] = trial
+                key['times'] = np.asarray(trial)
                 st.insert1(key)
 
 
