@@ -32,9 +32,8 @@ class Figure05(FormatedFigure):
                 'FI': self.fig.add_subplot(gs[1, 2]),
                 'vs_freq': self.fig.add_subplot(gs[2, 0]),
             }
-            self.ax['circ'] =self.fig.add_subplot(gs[2, 1])
-            self.ax['contrast'] =self.fig.add_subplot(gs[2, 2])
-
+            self.ax['circ'] = self.fig.add_subplot(gs[2, 1])
+            self.ax['contrast'] = self.fig.add_subplot(gs[2, 2])
 
     @staticmethod
     def format_ISI(ax):
@@ -75,8 +74,6 @@ class Figure05(FormatedFigure):
 
     @staticmethod
     def format_circ(ax):
-
-
         ax.set_ylim((0, 1))
         ax.set_xticks(ax.get_xticks()[::2])
         ax.set_xlabel('circular std')
@@ -90,7 +87,6 @@ class Figure05(FormatedFigure):
 
     @staticmethod
     def format_contrast(ax):
-
         ax.set_ylim((0, 1.0))
         ax.set_xlabel('contrast')
 
@@ -167,6 +163,12 @@ if __name__ == "__main__":
         df_py['spread'] = df_py['stim_std'] / df_py['eod'] / 2 / np.pi
         df_py['jitter'] = df_py['stim_std']  # rename to avoid conflict with std function
 
+        print('Correlation stimulus frequency and locking',
+              np.corrcoef(df_py.eod + df_py.delta_f, df_py.vector_strength)[1, 0])
+        print('Correlation jitter and locking',
+              np.corrcoef(df_py.jitter, df_py.vector_strength)[1, 0])
+        print('Correlation spread and locking',
+              np.corrcoef(df_py.spread, df_py.vector_strength)[1, 0])
         ax['vs_freq'].scatter(df_pu.frequency, df_pu.vector_strength, edgecolors='w', lw=.5, color='steelblue', \
                               label='p-units')
         ax['vs_freq'].scatter(df_py.frequency, df_py.vector_strength, edgecolors='w', lw=.5, color='orangered', \
@@ -185,9 +187,9 @@ if __name__ == "__main__":
         df_py['cell type'] = 'pyramidal'
         df = pd.concat([df_pu[df_pu.stimulus_coeff == 1], df_py[df_py.stimulus_coeff == 1]])
 
-
-        for (c,ct), dat in df.groupby(['cell_id','cell type']):
+        for (c, ct), dat in df.groupby(['cell_id', 'cell type']):
             mu = dat.groupby('contrast').mean().reset_index()
             s = dat.groupby('contrast').std().reset_index()
-            sns.pointplot('contrast', 'vector_strength',data = dat, ax=ax['contrast'],  palette={'p-units':'steelblue', 'pyramidal':'orangered'},
-                          order=[2.5, 5, 10, 20],hue='cell type', alpha=1, scale=.5)
+            sns.pointplot('contrast', 'vector_strength', data=dat, ax=ax['contrast'],
+                          palette={'p-units': 'steelblue', 'pyramidal': 'orangered'},
+                          order=[2.5, 5, 10, 20], hue='cell type', alpha=1, scale=.5)

@@ -5,7 +5,7 @@
     "safemode": true,
     "display.width": 20,
     "database.host": "localhost",
-    "database.user": "fabee",
-    "database.password": "mouse123",
+    "database.user": "datajoint",
+    "database.password": "datajoint",
     "database.port": 3306
 }

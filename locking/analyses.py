@@ -17,7 +17,7 @@ from djaddon import gitlog
 from locking.data import Runs, GlobalEFieldPeaksTroughs, peakdet, Cells, LocalEODPeaksTroughs, Baseline
 from pycircstat import event_series as es
 
-server = schema('efish_analyses', locals())
+schema = schema('efish_analyses', locals())
 
 
 def compute_1st_order_spectrum(aggregated_spikes, sampling_rate, alpha=0.001):
@@ -202,7 +202,7 @@ class PlotableSpectrum:
         sns.set_context('paper')
         # colors = ['#1b9e77', '#d95f02', '#7570b3', '#e7298a']
         colors = ['deeppink', 'dodgerblue', sns.xkcd_rgb['mustard'], sns.xkcd_rgb['steel grey']]
-
+        markers = ['*','^','D', 'o']
         stim, eod, baseline, beat = sympy.symbols('f_s, f_e, f_b, \Delta')
 
         for fos in ((self * Runs()).project() & restrictions).fetch.as_dict:
@@ -255,13 +255,13 @@ class PlotableSpectrum:
 
                     # use different colors and labels depending on the frequency
                     if cs != 0 and ce == 0 and cb == 0:
-                        ax.plot(freq, vs, 'ok', mfc=colors[0], label='stimulus')
+                        ax.plot(freq, vs, 'k', mfc=colors[0], label='stimulus', marker=markers[0],linestyle='None')
                     elif cs == 0 and ce != 0 and cb == 0:
-                        ax.plot(freq, vs, 'ok', mfc=colors[1], label='EOD')
+                        ax.plot(freq, vs, 'k', mfc=colors[1], label='EOD', marker=markers[1],linestyle='None')
                     elif cs == 0 and ce == 0 and cb != 0:
-                        ax.plot(freq, vs, 'ok', mfc=colors[2], label='baseline firing')
+                        ax.plot(freq, vs, 'k', mfc=colors[2], label='baseline firing', marker=markers[2],linestyle='None')
                     else:
-                        ax.plot(freq, vs, 'ok', mfc=colors[3], label='combinations')
+                        ax.plot(freq, vs, 'k', mfc=colors[3], label='combinations', marker=markers[3],linestyle='None')
                     ax.text(freq, vs + .05, r'$%s=%.1f$Hz' % (term, freq), fontsize=5, rotation=80,
                             ha='left',
                             va='bottom')
@@ -270,7 +270,7 @@ class PlotableSpectrum:
             ax.legend(by_label.values(), by_label.keys())
 
 
-@server
+@schema
 class FirstOrderSpikeSpectra(dj.Computed, PlotableSpectrum):
     definition = """
     # table that holds 1st order vector strength spectra
@@ -304,7 +304,7 @@ class FirstOrderSpikeSpectra(dj.Computed, PlotableSpectrum):
         self.insert1(key)
 
 
-@server
+@schema
 @gitlog
 class StimulusSpikeJitter(dj.Computed):
     definition = """
@@ -338,7 +338,7 @@ class StimulusSpikeJitter(dj.Computed):
         self.insert1(key)
 
 
-@server
+@schema
 @gitlog
 class BaselineSpikeJitter(dj.Computed):
     definition = """
@@ -374,7 +374,7 @@ class BaselineSpikeJitter(dj.Computed):
         self.insert1(key)
 
 
-@server
+@schema
 class SecondOrderSpikeSpectra(dj.Computed, PlotableSpectrum):
     definition = """
     # table that holds 2nd order vector strength spectra
@@ -400,7 +400,7 @@ class SecondOrderSpikeSpectra(dj.Computed, PlotableSpectrum):
         self.insert1(key)
 
 
-@server
+@schema
 class FirstOrderSignificantPeaks(dj.Computed):
     definition = """
     # hold significant peaks in spektra
@@ -448,7 +448,7 @@ class FirstOrderSignificantPeaks(dj.Computed):
                 double_peaks -= 1
 
 
-@server
+@schema
 class SecondOrderSignificantPeaks(dj.Computed):
     definition = """
     # hold significant peaks in spektra
@@ -494,7 +494,7 @@ class SecondOrderSignificantPeaks(dj.Computed):
                 double_peaks -= 1
 
 
-@server
+@schema
 class SamplingPointsPerBin(dj.Lookup):
     definition = """
     # sampling points per bin
@@ -507,7 +507,7 @@ class SamplingPointsPerBin(dj.Lookup):
     contents = [(2,), (4,), (8,)]
 
 
-@server
+@schema
 class PhaseLockingHistogram(dj.Computed):
     definition = """
     # phase locking histogram at significant peaks
@@ -592,7 +592,7 @@ class PhaseLockingHistogram(dj.Computed):
                        orient='h', bw=.05)
 
 
-@server
+@schema
 class CoincidenceTolerance(dj.Lookup):
     definition = """
     # Coincidence tolerance of EOD and stimulus phase in s
@@ -605,7 +605,7 @@ class CoincidenceTolerance(dj.Lookup):
     contents = [(0, 0.0001), ]
 
 
-@server
+@schema
 class EODStimulusPSTSpikes(dj.Computed):
     definition = """
     # PSTH of Stimulus and EOD at the difference frequency of both
