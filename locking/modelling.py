@@ -614,15 +614,17 @@ class RandomTrials(dj.Lookup):
 
 
     def load_spikes(self, key, centered=True):
+        if centered:
+            Phases = (RandomTrials.PhaseSet() * CenteredPUnitPhases()).project('phase', phase_cell='cell_id')
+        else:
+            Phases = (RandomTrials.PhaseSet() * UncenteredPUnitPhases()).project('phase', phase_cell='cell_id')
         trials = ((LocalEODPeaksTroughs() * Runs.SpikeTimes() \
-                   * RandomTrials.TrialSet() \
-                   * (RandomTrials.PhaseSet() * CenteredPUnitPhases()).project('phase', phase_cell='cell_id')) & key)
+                   * RandomTrials.TrialSet() * Phases) & key)
 
         dt = 1. / (Runs() & trials).fetch1['samplingrate']
         eod, duration = (Runs() & trials).fetch1['eod', 'duration']
         rad2period = 1 / 2 / np.pi / eod
         # get spikes, convert to s, align to EOD, add bootstrapped phase
-
         spikes = [s / 1000 - p[0] * dt + ph * rad2period for s, p, ph in zip(*trials.fetch['times', 'peaks', 'phase'])]
         return spikes, dt, eod, duration
 
