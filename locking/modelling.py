@@ -593,36 +593,36 @@ class RandomTrials(dj.Lookup):
 
     def _prepare(self):
         lens = [len(self & dict(n_total=ntot)) == 10 for ntot in (100,)]
-        n_total = 100
-        if not np.all(lens):
-            data = (Runs() * Runs.SpikeTimes() & dict(contrast=20, cell_id="2014-12-03-ad",
-                                                      delta_f=-400)).project().fetch.as_dict()
-            data = list(sorted(data, key=lambda x: x['trial_id']))
-            n = len(data)
-
-            df_center = pd.DataFrame(CenteredPUnitPhases().fetch[dj.key])
-            df_uncenter = pd.DataFrame(UncenteredPUnitPhases().fetch[dj.key])
-
-            ts = self.TrialSet()
-            cps = self.CenterPhaseSet()
-            ups = self.UncenterPhaseSet()
-
-            for repeat_id in range(10):
-                key = dict(n_total=n_total, repeat_id=repeat_id)
-                self.insert1(key)
-                for new_trial_id, trial_id in enumerate(np.random.randint(n, size=n_total)):
-                    key['new_trial_id'] = new_trial_id
-                    key.update(data[trial_id])
-                    ts.insert1(key)
-
-                key = dict(n_total=n_total, repeat_id=repeat_id)
-                for new_trial_id, ix in enumerate(np.random.randint(len(df_center), size=n_total)):
-                    key['new_trial_id'] = new_trial_id
-                    key.update(df_center.iloc[ix].to_dict())
-                    cps.insert1(key)
-
-                    key.update(df_uncenter.iloc[ix].to_dict())
-                    ups.insert1(key)
+        # n_total = 100
+        # if not np.all(lens):
+        #     data = (Runs() * Runs.SpikeTimes() & dict(contrast=20, cell_id="2014-12-03-ad",
+        #                                               delta_f=-400)).project().fetch.as_dict()
+        #     data = list(sorted(data, key=lambda x: x['trial_id']))
+        #     n = len(data)
+        #
+        #     df_center = pd.DataFrame(CenteredPUnitPhases().fetch[dj.key])
+        #     df_uncenter = pd.DataFrame(UncenteredPUnitPhases().fetch[dj.key])
+        #
+        #     ts = self.TrialSet()
+        #     cps = self.CenterPhaseSet()
+        #     ups = self.UncenterPhaseSet()
+        #
+        #     for repeat_id in range(10):
+        #         key = dict(n_total=n_total, repeat_id=repeat_id)
+        #         self.insert1(key, skip_duplicates=True)
+        #         for new_trial_id, trial_id in enumerate(np.random.randint(n, size=n_total)):
+        #             key['new_trial_id'] = new_trial_id
+        #             key.update(data[trial_id])
+        #             ts.insert1(key)
+        #
+        #         key = dict(n_total=n_total, repeat_id=repeat_id)
+        #         for new_trial_id, ix in enumerate(np.random.randint(len(df_center), size=n_total)):
+        #             key['new_trial_id'] = new_trial_id
+        #             key.update(df_center.iloc[ix].to_dict())
+        #             cps.insert1(key)
+        #
+        #             key.update(df_uncenter.iloc[ix].to_dict())
+        #             ups.insert1(key)
 
     def load_spikes(self, key, centered=True):
         trials = ((LocalEODPeaksTroughs() * Runs.SpikeTimes() \
