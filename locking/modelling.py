@@ -593,7 +593,6 @@ class RandomTrials(dj.Lookup):
             n = len(data)
 
             df = pd.DataFrame(CenteredPUnitPhases().fetch[dj.key])
-            print(df)
             ts = self.TrialSet()
             ps = self.PhaseSet()
 
@@ -618,8 +617,7 @@ class RandomTrials(dj.Lookup):
             Phases = (RandomTrials.PhaseSet() * CenteredPUnitPhases()).project('phase', phase_cell='cell_id')
         else:
             Phases = (RandomTrials.PhaseSet() * UncenteredPUnitPhases()).project('phase', phase_cell='cell_id')
-        trials = ((LocalEODPeaksTroughs() * Runs.SpikeTimes() \
-                   * RandomTrials.TrialSet() * Phases) & key)
+        trials = ((LocalEODPeaksTroughs() * Runs.SpikeTimes() * RandomTrials.TrialSet() * Phases) & key)
 
         dt = 1. / (Runs() & trials).fetch1['samplingrate']
         eod, duration = (Runs() & trials).fetch1['eod', 'duration']
