@@ -348,7 +348,6 @@ class FirstOrderSpikeSpectra(dj.Computed, PlotableSpectrum):
     # table that holds 1st order vector strength spectra
 
     -> Runs                         # each run has a spectrum
-    -> TrialAlign                    # depends on trial alignment
     ---
 
     frequencies             : longblob # frequencies at which the spectra are computed
@@ -717,7 +716,7 @@ class EODStimulusPSTSpikes(dj.Computed):
             eod_period = 1 / runs_eod.fetch1['frequency']
 
             whs = 10 * eod_period
-            times, peaks, epeaks = (Runs.SpikeTimes() * LocalEODPeaksTroughs() \
+            times, peaks, epeaks = (Runs.SpikeTimes() * GlobalEODPeaksTroughs() \
                                     * GlobalEFieldPeaksTroughs().project(epeaks='peaks') \
                                     & key).fetch['times', 'peaks', 'epeaks']
 
@@ -784,31 +783,8 @@ class EODStimulusPSTSpikes(dj.Computed):
             ax.set_ylabel(r'$\Delta f$')
             ax.tick_params(axis='y', length=0, width=0, which='major')
 
-            # for y_from, y_to, period in zip(y[:-1], y[1:], periods):
-            #     for x in np.arange(-whs, whs, 2 * period):
-            #         ax.fill_between([x, x + period], [y_from, y_from], [y_to, y_to], color='gainsboro', zorder=-20)
-            #         # ax.fill_between([-whs, whs], [y_from, y_from], [y_to, y_to], color='gainsboro', zorder=-20)
             ax.set_yticks(0.5 * (y[1:] + y[:-1]))
             ax.set_yticklabels(yticks)
             ax.set_ylim(y[[0, -1]])
 
 
-if __name__ == "__main__":
-    # time.sleep(np.random.rand() * 10)
-    # foss = FirstOrderSpikeSpectra()
-    # foss.populate(reserve_jobs=True)
-    #
-    # soss = SecondOrderSpikeSpectra()
-    # soss.populate(reserve_jobs=True)
-    #
-    # fosp = FirstOrderSignificantPeaks()
-    # fosp.populate(reserve_jobs=True)
-    #
-    # sosp = SecondOrderSignificantPeaks()
-    # sosp.populate(reserve_jobs=True)
-    #
-    # plh = PhaseLockingHistogram()
-    # plh.populate(reserve_jobs=True)
-
-    # EODStimulusPSTSpikes().populate(reserve_jobs=True)
-    BaselineSpikeJitter().populate(reserve_jobs=True)

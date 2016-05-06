@@ -12,8 +12,10 @@ import datajoint as dj
 import pycircstat as circ
 import datajoint as dj
 from djaddon import gitlog
-from locking.analyses import compute_1st_order_spectrum
-from locking.data import peakdet, Runs, Cells, LocalEODPeaksTroughs, CenteredPUnitPhases, UncenteredPUnitPhases, EFishes, GlobalEFieldPeaksTroughs
+from .analyses import TrialAlign
+
+from locking.data import peakdet, Runs, Cells, LocalEODPeaksTroughs, CenteredPUnitPhases, UncenteredPUnitPhases, \
+    GlobalEFieldPeaksTroughs, GlobalEODPeaksTroughs, EFishes
 from scipy import interp
 
 schema = dj.schema('efish_modelling', locals())
@@ -618,14 +620,10 @@ class RandomTrials(dj.Lookup):
             Phases = (RandomTrials.PhaseSet() * CenteredPUnitPhases()).project('phase', phase_cell='cell_id')
         else:
             Phases = (RandomTrials.PhaseSet() * UncenteredPUnitPhases()).project('phase', phase_cell='cell_id')
-        trials = ((LocalEODPeaksTroughs() * GlobalEFieldPeaksTroughs().project(stim_peaks='peaks')\
-                    * Runs.SpikeTimes() * RandomTrials.TrialSet() * Phases) & key)
+        trials = Runs.SpikeTimes() * RandomTrials.TrialSet() * Phases * TrialAlign() & key
 
-        tol = 0.0001
-        samplingrate = (Runs() & RandomTrials.TrialSet()).fetch1['samplingrate']
-        times, ep, sp, phase = trials.fetch['times', 'peaks','stim_peaks', 'phase']
+        times, phase, align_times = trials.fetch['times','phase','t0']
 
-        p0 = [ep[i][np.abs(sp[i][:, None] - ep[i][None, :]).min(axis=0) <= tol * samplingrate] / samplingrate for i in range(len(ep))]
 
         dt = 1. / (Runs() & trials).fetch1['samplingrate']
 
@@ -643,7 +641,7 @@ class RandomTrials(dj.Lookup):
         exit()
         #--------------------------
 
-        spikes = [s / 1000 - p[0] * dt for s, p in zip(*trials.fetch['times', 'peaks'])]
+        spikes = [s / 1000 - t0 for s, t0 in zip(*trials.fetch['times', 't0'])]
         for i,s in enumerate(spikes):
             ax[0].plot(s, 0*s + i, '.k', ms=1)
         spikes = [s / 1000 - p[0] * dt + ph * rad2period for s, p, ph in zip(*trials.fetch['times', 'peaks', 'phase'])]
