@@ -209,8 +209,8 @@ class EODFit(dj.Computed):
         t, win = get_best_time_window(dat['global_voltage'], dat['samplingrate'], w0, eod_cycles=10)
 
         fundamental = estimate_fundamental(win, dat['samplingrate'], highcut=3000)
-        assert abs(fundamental - dat['eod']) < 1, \
-            "EOD and fundamental estimation are more than 1Hz apart: %.2fHz, %.2fHz" % (fundamental, dat['eod'])
+        assert abs(fundamental - dat['eod']) < 2, \
+            "EOD and fundamental estimation are more than 2Hz apart: %.2fHz, %.2fHz" % (fundamental, dat['eod'])
         harm_coeff = get_harm_coeff(t, win, fundamental, key['no_harmonics'])
 
         self.insert1(dict(key, fundamental=fundamental))
