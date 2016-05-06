@@ -619,7 +619,7 @@ class RandomTrials(dj.Lookup):
                     key.update(df.iloc[ix].to_dict())
                     ps.insert1(key)
 
-    def load_spikes(self, key, centered=True, plot=True):
+    def load_spikes(self, key, centered=True, plot=False):
         if centered:
             Phases = (RandomTrials.PhaseSet() * CenteredPUnitPhases()).project('phase', phase_cell='cell_id')
         else:
