@@ -13,7 +13,7 @@ import pycircstat as circ
 import datajoint as dj
 from djaddon import gitlog
 from .analyses import TrialAlign
-
+from . import mkdir
 from locking.data import peakdet, Runs, Cells, LocalEODPeaksTroughs, CenteredPUnitPhases, UncenteredPUnitPhases, \
     GlobalEFieldPeaksTroughs, GlobalEODPeaksTroughs, EFishes, PaperCells
 from scipy import interp
@@ -619,8 +619,7 @@ class RandomTrials(dj.Lookup):
                     key.update(df.iloc[ix].to_dict())
                     ps.insert1(key)
 
-    def load_spikes(self, key, centered=True):
-        centered = False
+    def load_spikes(self, key, centered=True, plot=True):
         if centered:
             Phases = (RandomTrials.PhaseSet() * CenteredPUnitPhases()).project('phase', phase_cell='cell_id')
         else:
@@ -634,36 +633,31 @@ class RandomTrials(dj.Lookup):
         eod, duration = (Runs() & trials).fetch1['eod', 'duration']
         rad2period = 1 / 2 / np.pi / eod
         # get spikes, convert to s, align to EOD, add bootstrapped phase
-        print('Phase std', circ.std(trials.fetch['phase']), 'Centered', centered)
+        print('Phase std', circ.std(phase), 'Centered', centered)
 
-        fig, ax = plt.subplots(3, 1)
-        print(phase * rad2period)
-        # --------------------------
-        # TODO: remove this
-        from IPython import embed
-        embed()
-        exit()
-        # --------------------------
+        if plot:
+            fig, ax = plt.subplots(3, 1)
 
-        spikes = [s / 1000 - t0 for s, t0 in zip(*trials.fetch['times', 't0'])]
-        for i, s in enumerate(spikes):
-            ax[0].plot(s, 0 * s + i, '.k', ms=1)
-        spikes = [s / 1000 - p[0] * dt + ph * rad2period for s, p, ph in zip(*trials.fetch['times', 'peaks', 'phase'])]
-        for i, s in enumerate(spikes):
-            ax[1].plot(s, 0 * s + i, '.k', ms=1)
-        spikes = [s / 1000 - p.min() + ph * rad2period for s, p, ph in zip(times, p0, phase)]
-        for i, s in enumerate(spikes):
-            ax[2].plot(s, 0 * s + i, '.k', ms=1)
-        fig.savefig('alignments_{n_total}_{pyr_simul_id}_{repeat_id}_{centered}.pdf'.format(centered=centered, **key))
-        # --------------------------
-        # TODO: remove this
-        from IPython import embed
-        embed()
-        exit()
-        # --------------------------
+            spikes = [s / 1000 - t0 for s, t0 in zip(times, align_times)]
+            for i, s in enumerate(spikes):
+                ax[0].plot(s, 0 * s + i, '.k', ms=1)
+            spikes = [s / 1000 - t0 + ph * rad2period for s, t0, ph in zip(times, align_times, phase)]
+            for i, s in enumerate(spikes):
+                ax[1].plot(s, 0 * s + i, '.k', ms=1)
+            spikes = [s / 1000 - t0 + ph * rad2period for s, t0, ph in zip(times, align_times, phase)]
+            for i, s in enumerate(spikes):
+                ax[2].plot(s, 0 * s + i, '.k', ms=1)
+            fig.savefig(
+                'alignments_{n_total}_{pyr_simul_id}_{repeat_id}_{centered}.pdf'.format(centered=centered, **key))
+            # --------------------------
+            # TODO: remove this
+            from IPython import embed
+            embed()
+            exit()
+            # --------------------------
 
-        # add phase shift
-        spikes = [s + ph * rad2period for s, ph in zip(spikes, phase)]
+        spikes = [s / 1000 - t0 + ph * rad2period for s, t0, ph in zip(times, align_times, phase)]
+
         return spikes, dt, eod, duration
 
 
@@ -710,6 +704,8 @@ class PyramidalLIF(dj.Computed):
 
     def _make_tuples(self, key):
         key0 = dict(key)
+        figdir = 'figures/sanity/PyrLIF/'
+        mkdir(figdir)
         for centered in [True, False]:
             # load spike trains for randomly selected trials
             data, dt, eod, duration = RandomTrials().load_spikes(key0, centered=centered)
@@ -723,7 +719,7 @@ class PyramidalLIF(dj.Computed):
                 raise ValueError('delta_f should be unique')
             else:
                 delta_f = delta_f.squeeze()
-            stim_freq = eod + delta_f
+            # stim_freq = eod + delta_f
 
             # get parameters for simulation
             params = (PyramidalSimulationParameters() & key).fetch1()
@@ -733,7 +729,7 @@ class PyramidalLIF(dj.Computed):
             # plot histogram of jittered data
             fig, ax = plt.subplots()
             ax.hist(np.hstack(data) % (1 / eod), bins=100)
-            fig.savefig('punitinput_{repeat_id}_{centered}.png'.format(**key))
+            fig.savefig(figdir + 'punitinput_{repeat_id}_{centered}.png'.format(**key))
             plt.close(fig)
 
             # convolve with exponential filter
@@ -753,7 +749,7 @@ class PyramidalLIF(dj.Computed):
             ax.hist(np.hstack(isi), bins=100)
             ax.set_xticks(eod_period * np.arange(0, 50, 10))
             ax.set_xticklabels(np.arange(0, 50, 10))
-            fig.savefig('pyr_isi_{repeat_id}_{centered}.png'.format(**key))
+            fig.savefig(figdir + 'pyr_isi_{repeat_id}_{centered}.png'.format(**key))
             plt.close(fig)
 
             sisi = np.hstack(isi)
