@@ -348,7 +348,7 @@ class FirstOrderSpikeSpectra(dj.Computed, PlotableSpectrum):
     # table that holds 1st order vector strength spectra
 
     -> Runs                         # each run has a spectrum
-
+    -> TrialAlign                    # depends on trial alignment
     ---
 
     frequencies             : longblob # frequencies at which the spectra are computed
@@ -517,8 +517,8 @@ class FirstOrderSignificantPeaks(dj.Computed):
         # pt = (GlobalEFieldPeaksTroughs() & key).fetch(as_dict=True)
         # st = (Runs.SpikeTimes() & key).fetch(as_dict=True)
         # spikes = np.hstack([s['times'] / 1000 - p['peaks'][0] * dt for s, p in zip(st, pt)])
-        spikes = np.hstack([s / 1000 - p[0] * dt for s, p in zip(*trials.fetch['times', 'peaks'])])
-
+        # spikes = np.hstack([s / 1000 - p[0] * dt for s, p in zip(*trials.fetch['times', 'peaks'])])
+        spikes = np.hstack(TrialAlign().load_trials(key))
         interesting_frequencies = {'stimulus_coeff': run['eod'] + run['delta_f'], 'eod_coeff': run['eod'],
                                    'baseline_coeff': cell['baseline']}
 
@@ -532,7 +532,6 @@ class FirstOrderSignificantPeaks(dj.Computed):
                 print("Found double peak")
                 s['refined'] = double_peaks
                 self.insert1(s)
-                double_peaks -= 1
 
 
 @schema
