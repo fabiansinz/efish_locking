@@ -409,7 +409,7 @@ class StimulusSpikeJitter(dj.Computed):
 
     @property
     def populated_from(self):
-        return Runs() & LocalEODPeaksTroughs()
+        return Runs() & TrialAlign()
 
     def _make_tuples(self, key):
         print('Processing', key['cell_id'], 'run', key['run_id'], )
