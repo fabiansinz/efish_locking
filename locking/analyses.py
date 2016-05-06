@@ -14,7 +14,7 @@ import datajoint as dj
 import pycircstat as circ
 from datajoint import schema
 from djaddon import gitlog
-from locking.data import Runs, GlobalEFieldPeaksTroughs, peakdet, Cells, LocalEODPeaksTroughs, Baseline
+from locking.data import Runs, GlobalEFieldPeaksTroughs, peakdet, Cells, LocalEODPeaksTroughs, Baseline, GlobalEODPeaksTroughs
 from pycircstat import event_series as es
 
 schema = schema('efish_analyses', locals())
@@ -314,7 +314,7 @@ class TrialAlign(dj.Computed):
     def _make_tuples(self, key):
         tol = CoincidenceTolerance().fetch1['tol']
         samplingrate = (Runs() & key).fetch1['samplingrate']
-        trials = LocalEODPeaksTroughs() * \
+        trials = GlobalEODPeaksTroughs() * \
                  GlobalEFieldPeaksTroughs().project(stim_peaks='peaks') * \
                  Runs.SpikeTimes() & key
 
@@ -322,6 +322,41 @@ class TrialAlign(dj.Computed):
         p0 = ep[np.abs(sp[:, None] - ep[None, :]).min(axis=0) <= tol * samplingrate] / samplingrate
         key['t0'] = p0.min()
         self.insert1(key)
+
+    def load_trials(self, restriction):
+        """
+        Loads aligned trials.
+
+        :param restriction: restriction on Runs.SpikeTimes() * TrialAlign()
+        :returns: aligned trials; spike times are in seconds
+        """
+
+        trials = Runs.SpikeTimes() * TrialAlign() & restriction
+        return [s / 1000 - t0 for s, t0 in zip(*trials.fetch['times', 't0'])]
+
+    def plot(self, ax, restriction):
+        trials = self.load_trials(restriction)
+        for i, trial in enumerate(trials):
+            ax.plot(trial, 0*trial + i, '.k', ms=1)
+
+        ax.set_ylabel('trial no')
+        ax.set_xlabel('time [s]')
+
+    def plot_traces(self, ax, restriction):
+        sampling_rate = (Runs() & restriction).fetch['samplingrate']
+        sampling_rate = np.unique(sampling_rate)
+
+        assert len(sampling_rate) == 1, 'Sampling rate must be unique by restriction'
+        sampling_rate = sampling_rate[0]
+
+        trials = Runs.GlobalEOD() * Runs.GlobalEField() * TrialAlign() & restriction
+
+        t = np.arange(0,0.01, 1/sampling_rate)
+        n = len(t)
+        for geod, gef, t0 in zip(*trials.fetch['global_efield', 'global_voltage', 't0']):
+
+            ax.plot(t-t0, geod[:n], '-', color='dodgerblue', lw=.1)
+            ax.plot(t-t0, gef[:n], '-', color='k', lw=.1)
 
 
 
@@ -341,19 +376,16 @@ class FirstOrderSpikeSpectra(dj.Computed, PlotableSpectrum):
 
     @property
     def populated_from(self):
-        return Runs() & GlobalEFieldPeaksTroughs()
+        return Runs() & TrialAlign()
 
     def _make_tuples(self, key):
         print('Processing', key['cell_id'], 'run', key['run_id'], )
         samplingrate, duration = (Runs() & key).fetch1['samplingrate', 'duration']
-        dt = 1. / samplingrate
+        f_max = SpectraParameters().fetch1['f_max']
 
-        trials = ((GlobalEFieldPeaksTroughs() * Runs.SpikeTimes()) & key)
-
-        aggregated_spikes = np.hstack([s / 1000 - p[0] * dt for s, p in zip(*trials.fetch['times', 'peaks'])])
-
+        aggregated_spikes = np.hstack(TrialAlign().load_trials(key))
         key['frequencies'], key['vector_strengths'], key['critical_value'] = \
-            compute_1st_order_spectrum(aggregated_spikes, 1 / dt, alpha=0.001)
+            compute_1st_order_spectrum(aggregated_spikes, samplingrate, duration, alpha=0.001, f_max=f_max)
         vs = key['vector_strengths']
         vs[np.isnan(vs)] = 0
         self.insert1(key)
