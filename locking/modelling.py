@@ -12,7 +12,9 @@ import datajoint as dj
 import pycircstat as circ
 import datajoint as dj
 from djaddon import gitlog
-from locking.data import peakdet, Runs, Cells, LocalEODPeaksTroughs, CenteredPUnitPhases, UncenteredPUnitPhases, EFishes
+from locking.analyses import compute_1st_order_spectrum
+from locking.data import peakdet, Runs, Cells, LocalEODPeaksTroughs, CenteredPUnitPhases, UncenteredPUnitPhases, EFishes, GlobalEFieldPeaksTroughs
+from scipy import interp
 
 schema = dj.schema('efish_modelling', locals())
 
@@ -596,7 +598,6 @@ class RandomTrials(dj.Lookup):
             ts = self.TrialSet()
             ps = self.PhaseSet()
 
-
             for repeat_id in range(10):
                 key = dict(n_total=n_total, repeat_id=repeat_id)
                 self.insert1(key, skip_duplicates=True)
@@ -611,20 +612,56 @@ class RandomTrials(dj.Lookup):
                     key.update(df.iloc[ix].to_dict())
                     ps.insert1(key)
 
-
     def load_spikes(self, key, centered=True):
+        centered=False
         if centered:
             Phases = (RandomTrials.PhaseSet() * CenteredPUnitPhases()).project('phase', phase_cell='cell_id')
         else:
             Phases = (RandomTrials.PhaseSet() * UncenteredPUnitPhases()).project('phase', phase_cell='cell_id')
-        trials = ((LocalEODPeaksTroughs() * Runs.SpikeTimes() * RandomTrials.TrialSet() * Phases) & key)
+        trials = ((LocalEODPeaksTroughs() * GlobalEFieldPeaksTroughs().project(stim_peaks='peaks')\
+                    * Runs.SpikeTimes() * RandomTrials.TrialSet() * Phases) & key)
+
+        tol = 0.0001
+        samplingrate = (Runs() & RandomTrials.TrialSet()).fetch1['samplingrate']
+        times, ep, sp, phase = trials.fetch['times', 'peaks','stim_peaks', 'phase']
+
+        p0 = [ep[i][np.abs(sp[i][:, None] - ep[i][None, :]).min(axis=0) <= tol * samplingrate] / samplingrate for i in range(len(ep))]
 
         dt = 1. / (Runs() & trials).fetch1['samplingrate']
 
         eod, duration = (Runs() & trials).fetch1['eod', 'duration']
         rad2period = 1 / 2 / np.pi / eod
         # get spikes, convert to s, align to EOD, add bootstrapped phase
+        print('Phase std', circ.std(trials.fetch['phase']), 'Centered', centered)
+
+        fig, ax = plt.subplots(3,1)
+        print(phase*rad2period)
+        #--------------------------
+        # TODO: remove this
+        from IPython import embed
+        embed()
+        exit()
+        #--------------------------
+
+        spikes = [s / 1000 - p[0] * dt for s, p in zip(*trials.fetch['times', 'peaks'])]
+        for i,s in enumerate(spikes):
+            ax[0].plot(s, 0*s + i, '.k', ms=1)
         spikes = [s / 1000 - p[0] * dt + ph * rad2period for s, p, ph in zip(*trials.fetch['times', 'peaks', 'phase'])]
+        for i,s in enumerate(spikes):
+            ax[1].plot(s, 0*s + i, '.k', ms=1)
+        spikes = [s / 1000 - p.min() + ph * rad2period for s, p, ph in zip(times, p0, phase)]
+        for i,s in enumerate(spikes):
+            ax[2].plot(s, 0*s + i, '.k', ms=1)
+        fig.savefig('alignments_{n_total}_{pyr_simul_id}_{repeat_id}_{centered}.pdf'.format(centered=centered, **key))
+        #--------------------------
+        # TODO: remove this
+        from IPython import embed
+        embed()
+        exit()
+        #--------------------------
+
+        # add phase shift
+        spikes = [s + ph * rad2period for s, ph in zip(spikes, phase)]
         return spikes, dt, eod, duration
 
 
@@ -658,6 +695,7 @@ class PyramidalLIF(dj.Computed):
     ->PyramidalSimulationParameters
     centered        : bool  # whether the phases got centered per fish
     ---
+
     """
 
     class SpikeTimes(dj.Part):
@@ -725,6 +763,90 @@ class PyramidalLIF(dj.Computed):
                 key['simul_trial_id'] = i
                 key['times'] = np.asarray(trial)
                 st.insert1(key)
+#
+#
+# @schema
+# class LIFStimulusLocking(dj.Computed):
+#     definition = """
+#     -> PyramidalLIF                         # each run has a spectrum
+#     ---
+#     stimulus_frequency  : float # stimulus frequency
+#     vector_strength     : float # vector strength at the stimulus frequency
+#     """
+#
+#     def _make_tuples(self, key):
+#         key = dict(key)
+#         trials = PyramidalLIF.SpikeTimes() & key
+#         aggregated_spikes = np.hstack(trials.fetch['times'])
+#
+#
+#         # compute stimulus frequency
+#         delta_f, eod = np.unique((Runs() * RandomTrials() * RandomTrials.TrialSet() & key).fetch['delta_f','eod'])
+#         stim_freq = eod + delta_f
+#         aggregated_spikes %= 1 / stim_freq
+#
+#         # plt.hist(aggregated_spikes * stim_freq * 2 * np.pi, bins=100)
+#         # plt.title('centered={centered}'.format(**key))
+#         # plt.show()
+#         key['vector_strength'] = circ.vector_strength(aggregated_spikes * stim_freq * 2 * np.pi)
+#         key['stimulus_frequency'] = stim_freq
+#         self.insert1(key)
+
+#
+# @schema
+# class LIFFirstOrderSpikeSpectra(dj.Computed):
+#     definition = """
+#     # table that holds 1st order vector strength spectra
+#
+#     -> PyramidalLIF                         # each run has a spectrum
+#
+#     ---
+#
+#     frequencies             : longblob # frequencies at which the spectra are computed
+#     vector_strengths        : longblob # vector strengths at those frequencies
+#     critical_value          : float    # critical value for significance with alpha=0.001
+#     """
+#
+#     def _make_tuples(self, key):
+#         print('Processing', key)
+#
+#         trials = PyramidalLIF.SpikeTimes() & key
+#         samplingrate = (Runs() & RandomTrials.TrialSet() * PyramidalLIF()).fetch1['samplingrate']
+#         aggregated_spikes = np.hstack(trials.fetch['times'])
+#
+#         key['frequencies'], key['vector_strengths'], key['critical_value'] = \
+#             compute_1st_order_spectrum(aggregated_spikes, samplingrate, alpha=0.001)
+#         vs = key['vector_strengths']
+#         vs[np.isnan(vs)] = 0
+#         self.insert1(key)
+#
+#     def plot_avg_spectrum(self, ax, centered, f_max=2000):
+#         print(self & dict(centered=centered))
+#         freqs, vs = (self & dict(centered=centered)).fetch['frequencies', 'vector_strengths']
+#         f = np.hstack(freqs)
+#         idx = np.argsort(f)
+#         f = f[idx]
+#
+#         v = [interp(f, fr, v) for fr, v in zip(freqs, vs)]
+#         # vm = np.mean(v, axis=0)
+#         # vs = np.std(v, axis=0)
+#         vm = vs[0]
+#         vs = 0*vs[0]
+#         f = freqs[0]
+#
+#         idx = (f >=0) & (f <= f_max)
+#         f = f[idx]
+#         vm = vm[idx]
+#         vs = vs[idx]
+#         ax.fill_between(f, vm-vs, vm+vs, color='silver')
+#         ax.plot(f, vm, '-k')
+#         #----------------------------------
+#         # TODO: Remove this later
+#         from IPython import embed
+#         embed()
+#         # exit()
+#         #----------------------------------
+
 
 
 

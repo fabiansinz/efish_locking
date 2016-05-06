@@ -33,6 +33,7 @@ def compute_1st_order_spectrum(aggregated_spikes, sampling_rate, alpha=0.001):
     """
     if len(aggregated_spikes) < 2:
         return np.array([0]), np.array([0]), 0,
+    # TODO convert to direct_vector_strength_spectrum with duration and frequencies
     w_all, vsa_all = es.vector_strength_spectrum(aggregated_spikes, sampling_rate,
                                                  time=(np.amin(aggregated_spikes), np.amax(aggregated_spikes)))
     p = 1 - alpha
@@ -58,6 +59,7 @@ def compute_2nd_order_spectrum(spikes, t, sampling_rate, alpha=0.001, method='po
     # compute 99% confidence interval for Null distribution of 2nd order spectra (no locking)
 
     spikes_per_trial = list(map(len, spikes))
+    # TODO convert to direct_vector_strength_spectrum with duration and frequencies
     freqs, vs_spectra = zip(*[es.vector_strength_spectrum(sp, sampling_rate, time=t) for sp in spikes])
 
     freqs = freqs[0]
@@ -202,7 +204,7 @@ class PlotableSpectrum:
         sns.set_context('paper')
         # colors = ['#1b9e77', '#d95f02', '#7570b3', '#e7298a']
         colors = ['deeppink', 'dodgerblue', sns.xkcd_rgb['mustard'], sns.xkcd_rgb['steel grey']]
-        markers = ['*','^','D', 'o']
+        markers = ['*', '^', 'D', 'o']
         stim, eod, baseline, beat = sympy.symbols('f_s, f_e, f_b, \Delta')
 
         for fos in ((self * Runs()).project() & restrictions).fetch.as_dict:
@@ -255,13 +257,14 @@ class PlotableSpectrum:
 
                     # use different colors and labels depending on the frequency
                     if cs != 0 and ce == 0 and cb == 0:
-                        ax.plot(freq, vs, 'k', mfc=colors[0], label='stimulus', marker=markers[0],linestyle='None')
+                        ax.plot(freq, vs, 'k', mfc=colors[0], label='stimulus', marker=markers[0], linestyle='None')
                     elif cs == 0 and ce != 0 and cb == 0:
-                        ax.plot(freq, vs, 'k', mfc=colors[1], label='EOD', marker=markers[1],linestyle='None')
+                        ax.plot(freq, vs, 'k', mfc=colors[1], label='EOD', marker=markers[1], linestyle='None')
                     elif cs == 0 and ce == 0 and cb != 0:
-                        ax.plot(freq, vs, 'k', mfc=colors[2], label='baseline firing', marker=markers[2],linestyle='None')
+                        ax.plot(freq, vs, 'k', mfc=colors[2], label='baseline firing', marker=markers[2],
+                                linestyle='None')
                     else:
-                        ax.plot(freq, vs, 'k', mfc=colors[3], label='combinations', marker=markers[3],linestyle='None')
+                        ax.plot(freq, vs, 'k', mfc=colors[3], label='combinations', marker=markers[3], linestyle='None')
                     ax.text(freq, vs + .05, r'$%s=%.1f$Hz' % (term, freq), fontsize=5, rotation=80,
                             ha='left',
                             va='bottom')
@@ -295,7 +298,6 @@ class FirstOrderSpikeSpectra(dj.Computed, PlotableSpectrum):
         trials = ((GlobalEFieldPeaksTroughs() * Runs.SpikeTimes()) & key)
 
         aggregated_spikes = np.hstack([s / 1000 - p[0] * dt for s, p in zip(*trials.fetch['times', 'peaks'])])
-        # aggregated_spikes = np.hstack([s['times'] / 1000 - p['peaks'][0] * dt for s, p in zip(st, pt)])
 
         key['frequencies'], key['vector_strengths'], key['critical_value'] = \
             compute_1st_order_spectrum(aggregated_spikes, 1 / dt, alpha=0.001)
