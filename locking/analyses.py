@@ -528,10 +528,11 @@ class FirstOrderSignificantPeaks(dj.Computed):
             s.update(key)
             try:
                 self.insert1(s)
-            except pymysql.IntegrityError:  # sometimes one peak has two peaks nearby
+            except pymysql.err.IntegrityError:  # sometimes one peak has two peaks nearby
                 print("Found double peak")
                 s['refined'] = double_peaks
                 self.insert1(s)
+                double_peaks -= 1
 
 
 @schema
@@ -630,14 +631,17 @@ class PhaseLockingHistogram(dj.Computed):
 
         if key['eod_coeff'] > 0:
             # convert spikes to s and center on first peak of eod
-            times, peaks = (Runs.SpikeTimes() * LocalEODPeaksTroughs() & key).fetch['times', 'peaks']
-
-            spikes = np.hstack([s / 1000 - p[0] / samplingrate for s, p in zip(times, peaks)])
+            # times, peaks = (Runs.SpikeTimes() * LocalEODPeaksTroughs() & key).fetch['times', 'peaks']
+            peaks = (GlobalEODPeaksTroughs() & key).fetch['peaks']
+        #
+        #     spikes = np.hstack([s / 1000 - p[0] / samplingrate for s, p in zip(times, peaks)])
         else:
-            # convert spikes to s and center on first peak of stimulus
-            times, peaks = (Runs.SpikeTimes() * GlobalEFieldPeaksTroughs() & key).fetch['times', 'peaks']
-            spikes = np.hstack([s / 1000 - p[0] / samplingrate for s, p in zip(times, peaks)])
+        #     # convert spikes to s and center on first peak of stimulus
+        #     times, peaks = (Runs.SpikeTimes() * GlobalEFieldPeaksTroughs() & key).fetch['times', 'peaks']
+            peaks = (GlobalEFieldPeaksTroughs() & key).fetch['peaks']
+        #     spikes = np.hstack([s / 1000 - p[0] / samplingrate for s, p in zip(times, peaks)])
 
+        spikes = np.hstack(TrialAlign().load_trials(key))
         key['peak_frequency'] = samplingrate / np.mean([np.diff(p).mean() for p in peaks])
         key['locking_frequency'] = locking_frequency
 
