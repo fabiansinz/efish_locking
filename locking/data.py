@@ -1248,6 +1248,25 @@ class LocalEODPeaksTroughs(dj.Computed):
         dat = (Runs.LocalEOD() & key).fetch1()
 
         _, key['peaks'], _, key['troughs'] = peakdet(dat['local_efield'])
+        self.insert1(key)\
+
+@schema
+class GlobalEODPeaksTroughs(dj.Computed):
+    definition = """
+    # table for peaks and troughs in global EOD
+
+    -> Runs.GlobalEOD
+
+    ---
+
+    peaks               : longblob # peak indices
+    troughs             : longblob # trough indices
+    """
+
+    def _make_tuples(self, key):
+        dat = (Runs.GlobalEOD() & key).fetch1()
+
+        _, key['peaks'], _, key['troughs'] = peakdet(dat['global_voltage'])
         self.insert1(key)
 
 
