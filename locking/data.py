@@ -1233,7 +1233,7 @@ class GlobalEODPeaksTroughs(dj.Computed):
 
 
 @schema
-class PUnitPhases(dj.Manual):
+class PUnitPhases(dj.Imported):
     definition = """
     # data from baseline activity of P-Units for phase computations
 
@@ -1243,6 +1243,19 @@ class PUnitPhases(dj.Manual):
     phases          : longblob # phases of spike w.r.t. EOD
     spike_times     : longblob # spike times
     """
+
+    @property
+    def populated_from(self):
+        return EFishes() & (PaperCells() & dict(locking_experiment=0))
+
+    def _make_tuples(self, key):
+        if not hasattr(PUnitPhases, 'DATA'):
+            print('Loading raw data')
+            PUnitPhases.DATA = pickle.load(open(BASEDIR + '/punit_phases.pickle','rb'))
+        key.update(self.DATA[key['cell_id']])
+        self.insert1(key)
+
+
 
     def plot(self):
         # plot mean phase of spikes to show that they are fish dependent
