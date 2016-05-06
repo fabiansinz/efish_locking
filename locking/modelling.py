@@ -638,17 +638,16 @@ class RandomTrials(dj.Lookup):
         if plot:
             figdir = 'figures/sanity/pyr_lif_stimulus/'
             mkdir(figdir)
-            fig, ax = plt.subplots(3, 1)
+            fig, ax = plt.subplots(2, 1, sharex=True)
 
             spikes = [s / 1000 - t0 for s, t0 in zip(times, align_times)]
             for i, s in enumerate(spikes):
                 ax[0].plot(s, 0 * s + i, '.k', ms=1)
+            ax[0].set_title('without phase variation')
             spikes = [s / 1000 - t0 + ph * rad2period for s, t0, ph in zip(times, align_times, phase)]
             for i, s in enumerate(spikes):
                 ax[1].plot(s, 0 * s + i, '.k', ms=1)
-            spikes = [s / 1000 - t0 + ph * rad2period for s, t0, ph in zip(times, align_times, phase)]
-            for i, s in enumerate(spikes):
-                ax[2].plot(s, 0 * s + i, '.k', ms=1)
+            ax[1].set_title('with phase variation')
             fig.savefig(figdir +
                 'alignments_{n_total}_{pyr_simul_id}_{repeat_id}_{centered}.pdf'.format(centered=centered, **key))
 
@@ -675,8 +674,8 @@ class PyramidalSimulationParameters(dj.Lookup):
     """
 
     contents = [
-        dict(pyr_simul_id=0, tau_synapse=0.001, tau_neuron=0.01, n=50, noisesd=30,
-             amplitude=1.7, threshold=15, reset=0, offset=-20),
+        dict(pyr_simul_id=0, tau_synapse=0.001, tau_neuron=0.01, n=50, noisesd=10,
+             amplitude=1.6, threshold=15, reset=0, offset=-25),
     ]
 
 
@@ -709,14 +708,6 @@ class PyramidalLIF(dj.Computed):
             key = dict(key0, centered=centered)
 
             eod_period = 1 / eod
-
-            # compute stimulus frequency
-            delta_f = np.unique((Runs() * RandomTrials() * RandomTrials.TrialSet() & key).fetch['delta_f'])
-            if len(delta_f) > 1:
-                raise ValueError('delta_f should be unique')
-            else:
-                delta_f = delta_f.squeeze()
-            # stim_freq = eod + delta_f
 
             # get parameters for simulation
             params = (PyramidalSimulationParameters() & key).fetch1()
