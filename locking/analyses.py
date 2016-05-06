@@ -20,24 +20,6 @@ from pycircstat import event_series as es
 schema = schema('efish_analyses', locals())
 
 
-def compute_1st_order_spectrum(aggregated_spikes, sampling_rate, duration, alpha=0.001, f_max=2000):
-    """
-    Computes the 1st order amplitue spectrum of the spike train (i.e. the vector strength spectrum
-    of the aggregated spikes).
-
-    :param aggregated_spikes: all spike times over all trials
-    :param sampling_rate: sampling rate of the spikes
-    :param alpha: significance level for the boundary against non-locking
-    :returns: the frequencies for the vector strength spectrum, the spectrum, and the threshold against non-locking
-
-    """
-    if len(aggregated_spikes) < 2:
-        return np.array([0]), np.array([0]), 0,
-    f = np.fft.fftfreq(int(duration * sampling_rate), 1 / sampling_rate)
-    f = f[(f >= -f_max) & (f <= f_max)]
-    v = es.direct_vector_strength_spectrum(aggregated_spikes, f)
-    threshold = np.sqrt(- np.log(alpha) / len(aggregated_spikes))
-    return f, v, threshold
 
 
 def compute_2nd_order_spectrum(spikes, t, sampling_rate, alpha=0.001, method='poisson'):
@@ -378,6 +360,26 @@ class FirstOrderSpikeSpectra(dj.Computed, PlotableSpectrum):
     def populated_from(self):
         return Runs() & TrialAlign()
 
+    @staticmethod
+    def compute_1st_order_spectrum(aggregated_spikes, sampling_rate, duration, alpha=0.001, f_max=2000):
+        """
+        Computes the 1st order amplitue spectrum of the spike train (i.e. the vector strength spectrum
+        of the aggregated spikes).
+
+        :param aggregated_spikes: all spike times over all trials
+        :param sampling_rate: sampling rate of the spikes
+        :param alpha: significance level for the boundary against non-locking
+        :returns: the frequencies for the vector strength spectrum, the spectrum, and the threshold against non-locking
+
+        """
+        if len(aggregated_spikes) < 2:
+            return np.array([0]), np.array([0]), 0,
+        f = np.fft.fftfreq(int(duration * sampling_rate), 1 / sampling_rate)
+        f = f[(f >= -f_max) & (f <= f_max)]
+        v = es.direct_vector_strength_spectrum(aggregated_spikes, f)
+        threshold = np.sqrt(- np.log(alpha) / len(aggregated_spikes))
+        return f, v, threshold
+
     def _make_tuples(self, key):
         print('Processing', key['cell_id'], 'run', key['run_id'], )
         samplingrate, duration = (Runs() & key).fetch1['samplingrate', 'duration']
@@ -385,7 +387,7 @@ class FirstOrderSpikeSpectra(dj.Computed, PlotableSpectrum):
 
         aggregated_spikes = np.hstack(TrialAlign().load_trials(key))
         key['frequencies'], key['vector_strengths'], key['critical_value'] = \
-            compute_1st_order_spectrum(aggregated_spikes, samplingrate, duration, alpha=0.001, f_max=f_max)
+            self.compute_1st_order_spectrum(aggregated_spikes, samplingrate, duration, alpha=0.001, f_max=f_max)
         vs = key['vector_strengths']
         vs[np.isnan(vs)] = 0
         self.insert1(key)
@@ -413,10 +415,8 @@ class StimulusSpikeJitter(dj.Computed):
         print('Processing', key['cell_id'], 'run', key['run_id'], )
         dt = 1. / (Runs() & key).fetch1['samplingrate']
         eod = (Runs() & key).fetch1['eod']
-        trials = ((LocalEODPeaksTroughs() * Runs.SpikeTimes()) & key)
 
-        aggregated_spikes = np.hstack([s / 1000 - p[0] * dt for s, p in zip(*trials.fetch['times', 'peaks'])])
-
+        aggregated_spikes = np.hstack(TrialAlign().load_trials(key))
         aggregated_spikes %= 1 / eod
 
         aggregated_spikes *= eod * 2 * np.pi  # normalize to 2*pi
