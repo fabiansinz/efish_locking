@@ -20,7 +20,7 @@ from pycircstat import event_series as es
 schema = schema('efish_analyses', locals())
 
 
-def compute_1st_order_spectrum(aggregated_spikes, sampling_rate, alpha=0.001):
+def compute_1st_order_spectrum(aggregated_spikes, sampling_rate, duration, alpha=0.001, f_max=2000):
     """
     Computes the 1st order amplitue spectrum of the spike train (i.e. the vector strength spectrum
     of the aggregated spikes).
@@ -33,12 +33,11 @@ def compute_1st_order_spectrum(aggregated_spikes, sampling_rate, alpha=0.001):
     """
     if len(aggregated_spikes) < 2:
         return np.array([0]), np.array([0]), 0,
-    # TODO convert to direct_vector_strength_spectrum with duration and frequencies
-    w_all, vsa_all = es.vector_strength_spectrum(aggregated_spikes, sampling_rate,
-                                                 time=(np.amin(aggregated_spikes), np.amax(aggregated_spikes)))
-    p = 1 - alpha
-    threshold = np.sqrt(- np.log(1 - p) / len(aggregated_spikes))
-    return w_all, vsa_all, threshold
+    f = np.fft.fftfreq(int(duration * sampling_rate), 1 / sampling_rate)
+    f = f[(f >= -f_max) & (f <= f_max)]
+    v = es.direct_vector_strength_spectrum(aggregated_spikes, f)
+    threshold = np.sqrt(- np.log(alpha) / len(aggregated_spikes))
+    return f, v, threshold
 
 
 def compute_2nd_order_spectrum(spikes, t, sampling_rate, alpha=0.001, method='poisson'):
@@ -274,6 +273,59 @@ class PlotableSpectrum:
 
 
 @schema
+class CoincidenceTolerance(dj.Lookup):
+    definition = """
+    # Coincidence tolerance of EOD and stimulus phase in s
+
+    coincidence_idx         : int
+    ---
+    tol                     : double
+    """
+
+    contents = [(0, 0.0001), ]
+
+
+@schema
+class SpectraParameters(dj.Lookup):
+    definition = """
+    spectra_setting     : tinyint   # index of the setting
+    ---
+    f_max               : float     # maximal frequency considered
+    """
+
+    contents = [(0, 2000)]
+
+
+@schema
+class TrialAlign(dj.Computed):
+    definition = """
+    # computes a time point where the EOD and the stimulus coincide
+
+    -> Runs.SpikeTimes                     # each trial has an alignmnt point
+    -> CoincidenceTolerance                # tolerance of alignment
+    ---
+    t0                          : double   # time where the trial will be aligned to
+    """
+
+    @property
+    def populated_from(self):
+        return Runs() * Runs.SpikeTimes() * CoincidenceTolerance() & dict(am=0, n_harmonics=0)
+
+    def _make_tuples(self, key):
+        tol = CoincidenceTolerance().fetch1['tol']
+        samplingrate = (Runs() & key).fetch1['samplingrate']
+        trials = LocalEODPeaksTroughs() * \
+                 GlobalEFieldPeaksTroughs().project(stim_peaks='peaks') * \
+                 Runs.SpikeTimes() & key
+
+        ep, sp = trials.fetch1['peaks', 'stim_peaks']
+        p0 = ep[np.abs(sp[:, None] - ep[None, :]).min(axis=0) <= tol * samplingrate] / samplingrate
+        key['t0'] = p0.min()
+        self.insert1(key)
+
+
+
+@schema
 class FirstOrderSpikeSpectra(dj.Computed, PlotableSpectrum):
     definition = """
     # table that holds 1st order vector strength spectra
@@ -293,7 +345,8 @@ class FirstOrderSpikeSpectra(dj.Computed, PlotableSpectrum):
 
     def _make_tuples(self, key):
         print('Processing', key['cell_id'], 'run', key['run_id'], )
-        dt = 1. / (Runs() & key).fetch1['samplingrate']
+        samplingrate, duration = (Runs() & key).fetch1['samplingrate', 'duration']
+        dt = 1. / samplingrate
 
         trials = ((GlobalEFieldPeaksTroughs() * Runs.SpikeTimes()) & key)
 
@@ -592,19 +645,6 @@ class PhaseLockingHistogram(dj.Computed):
         sns.violinplot(data=df, y='delta_f', x='spikes', hue='type', split=True, ax=ax, hue_order=['EOD', 'stimulus'],
                        order=delta_fs, palette=palette, cut=0, inner=None, linewidth=.5,
                        orient='h', bw=.05)
-
-
-@schema
-class CoincidenceTolerance(dj.Lookup):
-    definition = """
-    # Coincidence tolerance of EOD and stimulus phase in s
-
-    coincidence_idx         : int
-    ---
-    tol                     : double
-    """
-
-    contents = [(0, 0.0001), ]
 
 
 @schema
