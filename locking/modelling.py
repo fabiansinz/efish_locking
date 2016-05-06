@@ -15,7 +15,7 @@ from djaddon import gitlog
 from .analyses import TrialAlign
 
 from locking.data import peakdet, Runs, Cells, LocalEODPeaksTroughs, CenteredPUnitPhases, UncenteredPUnitPhases, \
-    GlobalEFieldPeaksTroughs, GlobalEODPeaksTroughs, EFishes
+    GlobalEFieldPeaksTroughs, GlobalEODPeaksTroughs, EFishes, PaperCells
 from scipy import interp
 
 schema = dj.schema('efish_modelling', locals())
@@ -198,10 +198,15 @@ class EODFit(dj.Computed):
     fundamental     : double    # fundamental frequency
     """
 
+    @property
+    def populated_from(self):
+        return EFishes() * NoHarmonics() & (PaperCells() & dict(locking_experiment=1))
+
     def _make_tuples(self, key):
-        dat = (Runs() * Runs.LocalEOD() & key).fetch.limit(1).as_dict()[0]  # get some EOD trace
-        w0 = estimate_fundamental(dat['local_efield'], dat['samplingrate'], highcut=3000, normalize=.5)
-        t, win = get_best_time_window(dat['local_efield'], dat['samplingrate'], w0, eod_cycles=10)
+        dat = (Runs() * Runs.GlobalEOD() & key).fetch.limit(1).as_dict()[0]  # get some EOD trace
+
+        w0 = estimate_fundamental(dat['global_voltage'], dat['samplingrate'], highcut=3000, normalize=.5)
+        t, win = get_best_time_window(dat['global_voltage'], dat['samplingrate'], w0, eod_cycles=10)
 
         fundamental = estimate_fundamental(win, dat['samplingrate'], highcut=3000)
         assert abs(fundamental - dat['eod']) < 1, \
@@ -615,15 +620,14 @@ class RandomTrials(dj.Lookup):
                     ps.insert1(key)
 
     def load_spikes(self, key, centered=True):
-        centered=False
+        centered = False
         if centered:
             Phases = (RandomTrials.PhaseSet() * CenteredPUnitPhases()).project('phase', phase_cell='cell_id')
         else:
             Phases = (RandomTrials.PhaseSet() * UncenteredPUnitPhases()).project('phase', phase_cell='cell_id')
         trials = Runs.SpikeTimes() * RandomTrials.TrialSet() * Phases * TrialAlign() & key
 
-        times, phase, align_times = trials.fetch['times','phase','t0']
-
+        times, phase, align_times = trials.fetch['times', 'phase', 't0']
 
         dt = 1. / (Runs() & trials).fetch1['samplingrate']
 
@@ -632,31 +636,31 @@ class RandomTrials(dj.Lookup):
         # get spikes, convert to s, align to EOD, add bootstrapped phase
         print('Phase std', circ.std(trials.fetch['phase']), 'Centered', centered)
 
-        fig, ax = plt.subplots(3,1)
-        print(phase*rad2period)
-        #--------------------------
+        fig, ax = plt.subplots(3, 1)
+        print(phase * rad2period)
+        # --------------------------
         # TODO: remove this
         from IPython import embed
         embed()
         exit()
-        #--------------------------
+        # --------------------------
 
         spikes = [s / 1000 - t0 for s, t0 in zip(*trials.fetch['times', 't0'])]
-        for i,s in enumerate(spikes):
-            ax[0].plot(s, 0*s + i, '.k', ms=1)
+        for i, s in enumerate(spikes):
+            ax[0].plot(s, 0 * s + i, '.k', ms=1)
         spikes = [s / 1000 - p[0] * dt + ph * rad2period for s, p, ph in zip(*trials.fetch['times', 'peaks', 'phase'])]
-        for i,s in enumerate(spikes):
-            ax[1].plot(s, 0*s + i, '.k', ms=1)
+        for i, s in enumerate(spikes):
+            ax[1].plot(s, 0 * s + i, '.k', ms=1)
         spikes = [s / 1000 - p.min() + ph * rad2period for s, p, ph in zip(times, p0, phase)]
-        for i,s in enumerate(spikes):
-            ax[2].plot(s, 0*s + i, '.k', ms=1)
+        for i, s in enumerate(spikes):
+            ax[2].plot(s, 0 * s + i, '.k', ms=1)
         fig.savefig('alignments_{n_total}_{pyr_simul_id}_{repeat_id}_{centered}.pdf'.format(centered=centered, **key))
-        #--------------------------
+        # --------------------------
         # TODO: remove this
         from IPython import embed
         embed()
         exit()
-        #--------------------------
+        # --------------------------
 
         # add phase shift
         spikes = [s + ph * rad2period for s, ph in zip(spikes, phase)]
@@ -761,6 +765,8 @@ class PyramidalLIF(dj.Computed):
                 key['simul_trial_id'] = i
                 key['times'] = np.asarray(trial)
                 st.insert1(key)
+
+
 #
 #
 # @schema
