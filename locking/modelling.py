@@ -636,6 +636,8 @@ class RandomTrials(dj.Lookup):
         print('Phase std', circ.std(phase), 'Centered', centered)
 
         if plot:
+            figdir = 'figures/sanity/pyr_lif_stimulus/'
+            mkdir(figdir)
             fig, ax = plt.subplots(3, 1)
 
             spikes = [s / 1000 - t0 for s, t0 in zip(times, align_times)]
@@ -647,14 +649,9 @@ class RandomTrials(dj.Lookup):
             spikes = [s / 1000 - t0 + ph * rad2period for s, t0, ph in zip(times, align_times, phase)]
             for i, s in enumerate(spikes):
                 ax[2].plot(s, 0 * s + i, '.k', ms=1)
-            fig.savefig(
+            fig.savefig(figdir +
                 'alignments_{n_total}_{pyr_simul_id}_{repeat_id}_{centered}.pdf'.format(centered=centered, **key))
-            # --------------------------
-            # TODO: remove this
-            from IPython import embed
-            embed()
-            exit()
-            # --------------------------
+
 
         spikes = [s / 1000 - t0 + ph * rad2period for s, t0, ph in zip(times, align_times, phase)]
 
