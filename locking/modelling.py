@@ -674,7 +674,7 @@ class PyramidalSimulationParameters(dj.Lookup):
     """
 
     contents = [
-        dict(pyr_simul_id=0, tau_synapse=0.001, tau_neuron=0.01, n=50, noisesd=10,
+        dict(pyr_simul_id=0, tau_synapse=0.001, tau_neuron=0.01, n=50, noisesd=15,
              amplitude=1.6, threshold=15, reset=0, offset=-25),
     ]
 
