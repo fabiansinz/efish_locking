@@ -6,7 +6,7 @@ import sys
 import yaml
 import seaborn as sns
 
-BASEDIR = '/home/fabee/data/carolin/'
+BASEDIR = '/data/'
 schema = dj.schema('efish_data', locals())
 from pyrelacs.DataClasses import load
 import numpy as np
@@ -19,7 +19,6 @@ import statsmodels.api as sm
 from statsmodels.formula.api import ols
 import pickle
 ureg = UnitRegistry()
-DATADIR = '/home/fabee/data/carolin' # TODO cahnge that to /data
 
 def peakdet(v, delta=None):
     """
@@ -688,9 +687,9 @@ class EFishes(dj.Imported):
                         'weight': float(a['Weight'][:-1]),
                         'size': float(a['Size'][:-2])})
         else:
-            dat = pickle.load(open(DATADIR + '/punit_info.pickle','rb'))
+            dat = pickle.load(open(BASEDIR + '/punit_info.pickle','rb'))
             info = dat[key['cell_id']]
-            raw = pickle.load(open(DATADIR + '/punit_phases.pickle','rb'))
+            raw = pickle.load(open(BASEDIR + '/punit_phases.pickle','rb'))
             assert info['Species'] != 'Apteronotus albifrons', 'Wrong species'
 
             key.update({'fish_id': key['cell_id'][:10] if not 'Identifier' in info else info['Identifier'],
