@@ -761,33 +761,33 @@ class PyramidalLIF(dj.Computed):
 
 
 #
-#
-# @schema
-# class LIFStimulusLocking(dj.Computed):
-#     definition = """
-#     -> PyramidalLIF                         # each run has a spectrum
-#     ---
-#     stimulus_frequency  : float # stimulus frequency
-#     vector_strength     : float # vector strength at the stimulus frequency
-#     """
-#
-#     def _make_tuples(self, key):
-#         key = dict(key)
-#         trials = PyramidalLIF.SpikeTimes() & key
-#         aggregated_spikes = np.hstack(trials.fetch['times'])
-#
-#
-#         # compute stimulus frequency
-#         delta_f, eod = np.unique((Runs() * RandomTrials() * RandomTrials.TrialSet() & key).fetch['delta_f','eod'])
-#         stim_freq = eod + delta_f
-#         aggregated_spikes %= 1 / stim_freq
-#
-#         # plt.hist(aggregated_spikes * stim_freq * 2 * np.pi, bins=100)
-#         # plt.title('centered={centered}'.format(**key))
-#         # plt.show()
-#         key['vector_strength'] = circ.vector_strength(aggregated_spikes * stim_freq * 2 * np.pi)
-#         key['stimulus_frequency'] = stim_freq
-#         self.insert1(key)
+
+@schema
+class LIFStimulusLocking(dj.Computed):
+    definition = """
+    -> PyramidalLIF                         # each run has a spectrum
+    ---
+    stimulus_frequency  : float # stimulus frequency
+    vector_strength     : float # vector strength at the stimulus frequency
+    """
+
+    def _make_tuples(self, key):
+        key = dict(key)
+        trials = PyramidalLIF.SpikeTimes() & key
+        aggregated_spikes = np.hstack(trials.fetch['times'])
+
+
+        # compute stimulus frequency
+        delta_f, eod = np.unique((Runs() * RandomTrials() * RandomTrials.TrialSet() & key).fetch['delta_f','eod'])
+        stim_freq = eod + delta_f
+        aggregated_spikes %= 1 / stim_freq
+
+        # plt.hist(aggregated_spikes * stim_freq * 2 * np.pi, bins=100)
+        # plt.title('centered={centered}'.format(**key))
+        # plt.show()
+        key['vector_strength'] = circ.vector_strength(aggregated_spikes * stim_freq * 2 * np.pi)
+        key['stimulus_frequency'] = stim_freq
+        self.insert1(key)
 
 #
 # @schema
