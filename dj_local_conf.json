@@ -4,8 +4,8 @@
     "connection.init_function": null,
     "safemode": true,
     "display.width": 20,
-    "database.host": "localhost",
-    "database.user": "datajoint",
-    "database.password": "datajoint",
+    "database.host": "dragon.ad.bcm.edu",
+    "database.user": "efish",
+    "database.password": "apteronotus",
     "database.port": 3306
 }

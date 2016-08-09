@@ -199,7 +199,7 @@ class EODFit(dj.Computed):
     """
 
     @property
-    def populated_from(self):
+    def key_source(self):
         return EFishes() * NoHarmonics() & (PaperCells() & dict(locking_experiment=1))
 
     def _make_tuples(self, key):
@@ -362,7 +362,7 @@ class PUnitSimulations(dj.Computed):
     """
 
     @property
-    def populated_from(self):
+    def key_source(self):
         return (LIFPUnit() * Runs() * Cells() & dict(am=0, n_harmonics=0, cell_type='p-unit', contrast=20)).project()
 
     def _make_tuples(self, key):
@@ -596,8 +596,11 @@ class RandomTrials(dj.Lookup):
         lens = [len(self & dict(n_total=ntot)) == 10 for ntot in (100,)]
         n_total = 100
         if not np.all(lens):
-            data = (Runs() * Runs.SpikeTimes() & dict(contrast=20, cell_id="2014-12-03-ad",
-                                                      delta_f=-400)).project().fetch.as_dict()
+            # data = (Runs() * Runs.SpikeTimes() & dict(contrast=20, cell_id="2014-12-03-ad",
+            #                                           delta_f=-300)).project().fetch.as_dict()
+            data = (Runs() * Runs.SpikeTimes() & dict(contrast=20, cell_id="2014-06-06-ak",
+                                                      delta_f=300)).project().fetch.as_dict()
+            print('Using ', len(data), 'trials')
             data = list(sorted(data, key=lambda x: x['trial_id']))
             n = len(data)
 
@@ -706,6 +709,7 @@ class PyramidalLIF(dj.Computed):
             # load spike trains for randomly selected trials
             data, dt, eod, duration = RandomTrials().load_spikes(key0, centered=centered)
             key = dict(key0, centered=centered)
+            print('EOD',eod,'stim',eod-300)
 
             eod_period = 1 / eod
 
@@ -727,28 +731,38 @@ class PyramidalLIF(dj.Computed):
             h = np.exp(-np.abs(t) / tau_s)
             trials = np.vstack([np.convolve(np.histogram(sp, bins=bins)[0], h, 'full') for sp in data])[:, :-len(h) + 1]
 
-            # simulate neuron
-            t = np.arange(0, duration, dt)
-            ret, V = simple_lif(t, trials.sum(axis=0),
-                                **params)  # TODO make that mean to be independent of number of neurons
 
-            isi = [np.diff(r) for r in ret]
             fig, ax = plt.subplots()
-            ax.hist(np.hstack(isi), bins=100)
-            ax.set_xticks(eod_period * np.arange(0, 50, 10))
-            ax.set_xticklabels(np.arange(0, 50, 10))
-            fig.savefig(figdir + 'pyr_isi_{repeat_id}_{centered}.png'.format(**key))
+            inp = trials.sum(axis=0)
+            w = np.fft.fftshift(np.fft.fftfreq(len(inp), dt))
+            a = np.fft.fftshift(np.abs(np.fft.fft(inp)))
+            idx = (w >= -1200) & (w <= 1200)
+            ax.plot(w[idx], a[idx])
+            ax.set_xticks([eod,eod+300])
+            fig.savefig(figdir + 'pyr_spectrum_{repeat_id}_{centered}.png'.format(**key))
             plt.close(fig)
 
-            sisi = np.hstack(isi)
-            print('Firing rates (min, max, avg)', (1 / sisi).min(), (1 / sisi).max(), np.mean([len(r) for r in ret]))
-
-            self.insert1(key)
-            st = self.SpikeTimes()
-            for i, trial in enumerate(ret):
-                key['simul_trial_id'] = i
-                key['times'] = np.asarray(trial)
-                st.insert1(key)
+            # # simulate neuron
+            # t = np.arange(0, duration, dt)
+            # ret, V = simple_lif(t, trials.sum(axis=0),
+            #                     **params)  # TODO mean would be more elegent than sum
+            # isi = [np.diff(r) for r in ret]
+            # # fig, ax = plt.subplots()
+            # # ax.hist(np.hstack(isi), bins=100)
+            # # ax.set_xticks(eod_period * np.arange(0, 50, 10))
+            # # ax.set_xticklabels(np.arange(0, 50, 10))
+            # # fig.savefig(figdir + 'pyr_isi_{repeat_id}_{centered}.png'.format(**key))
+            # # plt.close(fig)
+            #
+            # sisi = np.hstack(isi)
+            # print('Firing rates (min, max, avg)', (1 / sisi).min(), (1 / sisi).max(), np.mean([len(r) for r in ret]))
+            #
+            # self.insert1(key)
+            # st = self.SpikeTimes()
+            # for i, trial in enumerate(ret):
+            #     key['simul_trial_id'] = i
+            #     key['times'] = np.asarray(trial)
+            #     st.insert1(key)
 
 
 #
@@ -772,6 +786,15 @@ class LIFStimulusLocking(dj.Computed):
         delta_f, eod = np.unique((Runs() * RandomTrials() * RandomTrials.TrialSet() & key).fetch['delta_f','eod'])
         stim_freq = eod + delta_f
         aggregated_spikes %= 1 / stim_freq
+
+        # with sns.axes_style('whitegrid'):
+        #     fig, ax = plt.subplots()
+        # for i, s in enumerate(trials.fetch['times']):
+        #     ax.scatter(s, 0*s+i)
+        # ax.set_title('centered = {centered}'.format(**key))
+        # plt.show()
+        # plt.close(fig)
+
 
         # plt.hist(aggregated_spikes * stim_freq * 2 * np.pi, bins=100)
         # plt.title('centered={centered}'.format(**key))

@@ -673,7 +673,7 @@ class EFishes(dj.Imported):
     """
 
     @property
-    def populated_from(self):
+    def key_source(self):
         return PaperCells()
 
     def _make_tuples(self, key):
@@ -715,7 +715,7 @@ class Cells(dj.Imported):
     """
 
     @property
-    def populated_from(self):
+    def key_source(self):
         return PaperCells() & dict(locking_experiment=1)
 
     def _make_tuples(self, key):
@@ -1245,7 +1245,7 @@ class PUnitPhases(dj.Imported):
     """
 
     @property
-    def populated_from(self):
+    def key_source(self):
         return EFishes() & (PaperCells() & dict(locking_experiment=0))
 
     def _make_tuples(self, key):
