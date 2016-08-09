@@ -14,12 +14,11 @@ import datajoint as dj
 import pycircstat as circ
 from datajoint import schema
 from djaddon import gitlog
-from locking.data import Runs, GlobalEFieldPeaksTroughs, peakdet, Cells, LocalEODPeaksTroughs, Baseline, GlobalEODPeaksTroughs
+from locking.data import Runs, GlobalEFieldPeaksTroughs, peakdet, Cells, LocalEODPeaksTroughs, Baseline, \
+    GlobalEODPeaksTroughs
 from pycircstat import event_series as es
 
 schema = schema('efish_analyses', locals())
-
-
 
 
 def compute_2nd_order_spectrum(spikes, t, sampling_rate, alpha=0.001, method='poisson'):
@@ -290,7 +289,7 @@ class TrialAlign(dj.Computed):
     """
 
     @property
-    def populated_from(self):
+    def key_source(self):
         return Runs() * Runs.SpikeTimes() * CoincidenceTolerance() & dict(am=0, n_harmonics=0)
 
     def _make_tuples(self, key):
@@ -319,7 +318,7 @@ class TrialAlign(dj.Computed):
     def plot(self, ax, restriction):
         trials = self.load_trials(restriction)
         for i, trial in enumerate(trials):
-            ax.plot(trial, 0*trial + i, '.k', ms=1)
+            ax.plot(trial, 0 * trial + i, '.k', ms=1)
 
         ax.set_ylabel('trial no')
         ax.set_xlabel('time [s]')
@@ -333,13 +332,11 @@ class TrialAlign(dj.Computed):
 
         trials = Runs.GlobalEOD() * Runs.GlobalEField() * TrialAlign() & restriction
 
-        t = np.arange(0,0.01, 1/sampling_rate)
+        t = np.arange(0, 0.01, 1 / sampling_rate)
         n = len(t)
         for geod, gef, t0 in zip(*trials.fetch['global_efield', 'global_voltage', 't0']):
-
-            ax.plot(t-t0, geod[:n], '-', color='dodgerblue', lw=.1)
-            ax.plot(t-t0, gef[:n], '-', color='k', lw=.1)
-
+            ax.plot(t - t0, geod[:n], '-', color='dodgerblue', lw=.1)
+            ax.plot(t - t0, gef[:n], '-', color='k', lw=.1)
 
 
 @schema
@@ -356,7 +353,7 @@ class FirstOrderSpikeSpectra(dj.Computed, PlotableSpectrum):
     """
 
     @property
-    def populated_from(self):
+    def key_source(self):
         return Runs() & TrialAlign()
 
     @staticmethod
@@ -407,7 +404,7 @@ class StimulusSpikeJitter(dj.Computed):
     """
 
     @property
-    def populated_from(self):
+    def key_source(self):
         return Runs() & TrialAlign()
 
     def _make_tuples(self, key):
@@ -440,7 +437,7 @@ class BaselineSpikeJitter(dj.Computed):
     """
 
     @property
-    def populated_from(self):
+    def key_source(self):
         return Baseline() & Baseline.LocalEODPeaksTroughs() & dict(cell_type='p-unit')
 
     def _make_tuples(self, key):
@@ -617,7 +614,7 @@ class PhaseLockingHistogram(dj.Computed):
         """
 
     @property
-    def populated_from(self):
+    def key_source(self):
         return FirstOrderSignificantPeaks() \
                & 'baseline_coeff=0' \
                & '((stimulus_coeff=1 and eod_coeff=0) or (stimulus_coeff=0 and eod_coeff=1))' \
@@ -635,10 +632,10 @@ class PhaseLockingHistogram(dj.Computed):
         #
         #     spikes = np.hstack([s / 1000 - p[0] / samplingrate for s, p in zip(times, peaks)])
         else:
-        #     # convert spikes to s and center on first peak of stimulus
-        #     times, peaks = (Runs.SpikeTimes() * GlobalEFieldPeaksTroughs() & key).fetch['times', 'peaks']
+            #     # convert spikes to s and center on first peak of stimulus
+            #     times, peaks = (Runs.SpikeTimes() * GlobalEFieldPeaksTroughs() & key).fetch['times', 'peaks']
             peaks = (GlobalEFieldPeaksTroughs() & key).fetch['peaks']
-        #     spikes = np.hstack([s / 1000 - p[0] / samplingrate for s, p in zip(times, peaks)])
+        # spikes = np.hstack([s / 1000 - p[0] / samplingrate for s, p in zip(times, peaks)])
 
         spikes = np.hstack(TrialAlign().load_trials(key))
         key['peak_frequency'] = samplingrate / np.mean([np.diff(p).mean() for p in peaks])
@@ -699,7 +696,7 @@ class EODStimulusPSTSpikes(dj.Computed):
     """
 
     @property
-    def populated_from(self):
+    def key_source(self):
         constr = dict(stimulus_coeff=1, baseline_coeff=0, eod_coeff=0, refined=1)
         cell_type = Cells() & dict(cell_type='p-unit')
         return FirstOrderSignificantPeaks() & cell_type & constr
@@ -786,5 +783,3 @@ class EODStimulusPSTSpikes(dj.Computed):
             ax.set_yticks(0.5 * (y[1:] + y[:-1]))
             ax.set_yticklabels(yticks)
             ax.set_ylim(y[[0, -1]])
-
-
