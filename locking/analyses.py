@@ -21,52 +21,7 @@ from pycircstat import event_series as es
 schema = schema('efish_analyses', locals())
 
 
-def compute_2nd_order_spectrum(spikes, t, sampling_rate, alpha=0.001, method='poisson', f_max=2000):
-    """
-    Computes the 1st order amplitue spectrum of the spike train (i.e. the vector strength spectrum
-    of the aggregated spikes).
 
-
-    :param spikes: list of spike trains from the single trials
-    :param t: numpy.array of time points
-    :param sampling_rate: sampling rate of the spikes
-    :param alpha: significance level for the boundary against non-locking
-    :param method: method to compute the confidence interval (poisson or gauss)
-    :returns: the frequencies for the vector strength spectrum, the spectrum, and the threshold against non-locking
-
-    """
-
-    # compute 99% confidence interval for Null distribution of 2nd order spectra (no locking)
-
-    spikes_per_trial = list(map(len, spikes))
-    # TODO convert to direct_vector_strength_spectrum with duration and frequencies
-    freqs, vs_spectra = zip(*[es.vector_strength_spectrum(sp, sampling_rate, time=t) for sp in spikes])
-
-    freqs = freqs[0]
-    m_ampl = np.mean(vs_spectra, axis=0)
-
-    if method == 'poisson':
-        poiss_rate = np.mean(spikes_per_trial)
-        r = np.linspace(0, 2, 10000)
-        dr = r[1] - r[0]
-        mu = np.sum(2 * poiss_rate * r ** 2 * np.exp(poiss_rate * np.exp(-r ** 2) - poiss_rate - r ** 2) / (
-            1 - np.exp(-poiss_rate))) * dr
-        s = np.sum(2 * poiss_rate * r ** 3 * np.exp(poiss_rate * np.exp(-r ** 2) - poiss_rate - r ** 2) / (
-            1 - np.exp(-poiss_rate))) * dr
-        s2 = np.sqrt(s - mu ** 2.)
-        y = stats.norm.ppf(1 - alpha, loc=mu,
-                           scale=s2 / np.sqrt(len(spikes_per_trial)))  # use central limit theorem
-
-    elif method == 'gauss':
-        n = np.asarray(spikes_per_trial)
-        mu = np.sqrt(np.pi) / 2. * np.mean(1. / np.sqrt(n))
-        N = len(spikes_per_trial)
-        s = np.sqrt(np.mean(1. / n - np.pi / 4. / n) / N)
-        y = stats.norm.ppf(1 - alpha, loc=mu, scale=s)
-    else:
-        raise ValueError("Method %s not known" % (method,))
-    idx = freqs[(freqs >= -f_max) & (freqs <= f_max)]
-    return freqs[idx], m_ampl[idx], y
 
 
 def vector_strength_at(f, trial):
@@ -490,6 +445,53 @@ class SecondOrderSpikeSpectra(dj.Computed, PlotableSpectrum):
     def key_source(self):
         return Runs() & dict(am=0)
 
+    @staticmethod
+    def compute_2nd_order_spectrum(spikes, t, sampling_rate, alpha=0.001, method='poisson', f_max=2000):
+        """
+        Computes the 1st order amplitue spectrum of the spike train (i.e. the vector strength spectrum
+        of the aggregated spikes).
+
+
+        :param spikes: list of spike trains from the single trials
+        :param t: numpy.array of time points
+        :param sampling_rate: sampling rate of the spikes
+        :param alpha: significance level for the boundary against non-locking
+        :param method: method to compute the confidence interval (poisson or gauss)
+        :returns: the frequencies for the vector strength spectrum, the spectrum, and the threshold against non-locking
+
+        """
+
+        # compute 99% confidence interval for Null distribution of 2nd order spectra (no locking)
+        spikes_per_trial = list(map(len, spikes))
+        # TODO convert to direct_vector_strength_spectrum with duration and frequencies
+        freqs, vs_spectra = zip(*[es.vector_strength_spectrum(sp, sampling_rate, time=t) for sp in spikes])
+
+        freqs = freqs[0]
+        m_ampl = np.mean(vs_spectra, axis=0)
+
+        if method == 'poisson':
+            poiss_rate = np.mean(spikes_per_trial)
+            r = np.linspace(0, 2, 10000)
+            dr = r[1] - r[0]
+            mu = np.sum(2 * poiss_rate * r ** 2 * np.exp(poiss_rate * np.exp(-r ** 2) - poiss_rate - r ** 2) / (
+                1 - np.exp(-poiss_rate))) * dr
+            s = np.sum(2 * poiss_rate * r ** 3 * np.exp(poiss_rate * np.exp(-r ** 2) - poiss_rate - r ** 2) / (
+                1 - np.exp(-poiss_rate))) * dr
+            s2 = np.sqrt(s - mu ** 2.)
+            y = stats.norm.ppf(1 - alpha, loc=mu,
+                               scale=s2 / np.sqrt(len(spikes_per_trial)))  # use central limit theorem
+
+        elif method == 'gauss':
+            n = np.asarray(spikes_per_trial)
+            mu = np.sqrt(np.pi) / 2. * np.mean(1. / np.sqrt(n))
+            N = len(spikes_per_trial)
+            s = np.sqrt(np.mean(1. / n - np.pi / 4. / n) / N)
+            y = stats.norm.ppf(1 - alpha, loc=mu, scale=s)
+        else:
+            raise ValueError("Method %s not known" % (method,))
+        idx = (freqs >= -f_max) & (freqs <= f_max)
+        return freqs[idx], m_ampl[idx], y
+
     def _make_tuples(self, key):
         print('Processing', key['cell_id'], 'run', key['run_id'], )
         dat = (Runs() & key).fetch(as_dict=True)[0]
@@ -500,7 +502,7 @@ class SecondOrderSpikeSpectra(dj.Computed, PlotableSpectrum):
         f_max = (SpectraParameters() & key).fetch1['f_max']
 
         key['frequencies'], key['vector_strengths'], key['critical_value'] = \
-            compute_2nd_order_spectrum(st, t, 1 / dt, alpha=0.001, method='poisson', f_max=f_max)
+            SecondOrderSpikeSpectra.compute_2nd_order_spectrum(st, t, 1 / dt, alpha=0.001, method='poisson', f_max=f_max)
         self.insert1(key)
 
 

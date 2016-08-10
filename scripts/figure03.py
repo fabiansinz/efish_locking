@@ -13,6 +13,12 @@ rel = Runs() * SecondOrderSignificantPeaks() * StimulusSpikeJitter() * Cells() \
              cell_type='p-unit', am=0, n_harmonics=0) \
       & 'stimulus_coeff > 0' \
       & 'frequency > 0'
+#----------------------------------
+# TODO: Remove this later
+from IPython import embed
+embed()
+# exit()
+#----------------------------------
 
 
 df = pd.DataFrame(rel.fetch())
@@ -38,6 +44,7 @@ ax['cstd'].axis('tight')
 ax['cstd'].set_xticks(ax['cstd'].get_xticks()[::2])
 
 df2 = df[df.stimulus_coeff == 1].groupby(['cell_id','contrast']).apply(count)
+
 sns.pointplot('contrast', 'vector_strength', data=df2[df2.elements > 1],
               order=[2.5, 5, 10, 20], color='gray',
               ax=ax['contrast'], hue='cell_id',
