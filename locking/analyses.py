@@ -21,9 +21,6 @@ from pycircstat import event_series as es
 schema = schema('efish_analyses', locals())
 
 
-
-
-
 def vector_strength_at(f, trial):
     return 1 - circ.var((trial % (1. / f)) * f * 2 * np.pi)
 
@@ -77,7 +74,7 @@ def find_best_locking(spikes, f0, tol=3):
 
 
 def find_significant_peaks(spikes, w, spectrum, peak_dict, threshold, tol=3.,
-                           upper_cutoff=2000):  
+                           upper_cutoff=2000):
     if not threshold > 0:
         print("Threshold value %.4f is not allowed" % threshold)
         return []
@@ -188,7 +185,8 @@ class PlotableSpectrum:
                 freq_group = freq_group[
                     freq_group.on == freq_group.on.min()]  # take the ones that have the lowest factors
 
-                for i, (cs, ce, cb, _, _, _, _, freq, vs, _, _) in freq_group.iterrows():
+                for i, (cs, ce, cb, freq, vs) in freq_group[
+                    ['stimulus_coeff', 'eod_coeff', 'baseline_coeff', 'frequency', 'vector_strength']].iterrows():
                     terms = []
                     if 0 <= freq <= f_max:
                         term = cs * stim + ce * eod + cb * baseline
@@ -213,7 +211,8 @@ class PlotableSpectrum:
                     else:
                         ax.plot(freq, vs, 'k', mfc=self.colors[4], label='combinations', marker=markers[4],
                                 linestyle='None')
-                    ax.text(freq, vs + .05, r'$%s=%.1f$Hz' % (term, freq), fontsize=5, rotation=80,
+                    term = term.replace('1.0 ', ' ')
+                    ax.text(freq, vs + .05, r'$%s=%.1f$Hz' % (term, freq), fontsize=5, rotation=85,
                             ha='left',
                             va='bottom')
             handles, labels = ax.get_legend_handles_labels()
@@ -325,7 +324,7 @@ class FirstOrderSpikeSpectra(dj.Computed, PlotableSpectrum):
 
     @property
     def key_source(self):
-        return Runs()*SpectraParameters() & TrialAlign() & dict(am=0)
+        return Runs() * SpectraParameters() & TrialAlign() & dict(am=0)
 
     @staticmethod
     def compute_1st_order_spectrum(aggregated_spikes, sampling_rate, duration, alpha=0.001, f_max=2000):
@@ -443,7 +442,7 @@ class SecondOrderSpikeSpectra(dj.Computed, PlotableSpectrum):
 
     @property
     def key_source(self):
-        return Runs()*SpectraParameters() & dict(am=0)
+        return Runs() * SpectraParameters() & dict(am=0)
 
     @staticmethod
     def compute_2nd_order_spectrum(spikes, t, sampling_rate, alpha=0.001, method='poisson', f_max=2000):
@@ -502,7 +501,8 @@ class SecondOrderSpikeSpectra(dj.Computed, PlotableSpectrum):
         f_max = (SpectraParameters() & key).fetch1['f_max']
 
         key['frequencies'], key['vector_strengths'], key['critical_value'] = \
-            SecondOrderSpikeSpectra.compute_2nd_order_spectrum(st, t, 1 / dt, alpha=0.001, method='poisson', f_max=f_max)
+            SecondOrderSpikeSpectra.compute_2nd_order_spectrum(st, t, 1 / dt, alpha=0.001, method='poisson',
+                                                               f_max=f_max)
         self.insert1(key)
 
 
@@ -727,7 +727,7 @@ class EODStimulusPSTSpikes(dj.Computed):
     def key_source(self):
         constr = dict(stimulus_coeff=1, baseline_coeff=0, eod_coeff=0, refined=1)
         cell_type = Cells() & dict(cell_type='p-unit')
-        return FirstOrderSignificantPeaks()*CoincidenceTolerance() & cell_type & constr
+        return FirstOrderSignificantPeaks() * CoincidenceTolerance() & cell_type & constr
 
     def _make_tuples(self, key):
         # key_sub = dict(key)
@@ -752,7 +752,7 @@ class EODStimulusPSTSpikes(dj.Computed):
             spikes = []
 
             for train, in_phase in zip(times, p0):
-                train = np.asarray(train)/1000  # convert to seconds
+                train = np.asarray(train) / 1000  # convert to seconds
                 for phase in in_phase:
                     chunk = train[(train >= phase - whs) & (train <= phase + whs)] - phase
                     if len(chunk) > 0:
