@@ -21,7 +21,7 @@ from pycircstat import event_series as es
 schema = schema('efish_analyses', locals())
 
 
-def compute_2nd_order_spectrum(spikes, t, sampling_rate, alpha=0.001, method='poisson'):
+def compute_2nd_order_spectrum(spikes, t, sampling_rate, alpha=0.001, method='poisson', f_max=2000):
     """
     Computes the 1st order amplitue spectrum of the spike train (i.e. the vector strength spectrum
     of the aggregated spikes).
@@ -65,8 +65,8 @@ def compute_2nd_order_spectrum(spikes, t, sampling_rate, alpha=0.001, method='po
         y = stats.norm.ppf(1 - alpha, loc=mu, scale=s)
     else:
         raise ValueError("Method %s not known" % (method,))
-
-    return freqs, m_ampl, y
+    idx = freqs[(freqs >= -f_max) & (freqs <= f_max)]
+    return freqs[idx], m_ampl[idx], y
 
 
 def vector_strength_at(f, trial):
@@ -122,7 +122,7 @@ def find_best_locking(spikes, f0, tol=3):
 
 
 def find_significant_peaks(spikes, w, spectrum, peak_dict, threshold, tol=3.,
-                           upper_cutoff=2000):  # check that search intervals work
+                           upper_cutoff=2000):  
     if not threshold > 0:
         print("Threshold value %.4f is not allowed" % threshold)
         return []
@@ -476,7 +476,7 @@ class SecondOrderSpikeSpectra(dj.Computed, PlotableSpectrum):
     definition = """
     # table that holds 2nd order vector strength spectra
     -> Runs                  # each run has a spectrum
-
+    -> SpectraParameters
     ---
 
     frequencies             : longblob # frequencies at which the spectra are computed
@@ -486,7 +486,7 @@ class SecondOrderSpikeSpectra(dj.Computed, PlotableSpectrum):
 
     @property
     def key_source(self):
-        Runs() & dict(am=0)
+        return Runs() & dict(am=0)
 
     def _make_tuples(self, key):
         print('Processing', key['cell_id'], 'run', key['run_id'], )
@@ -495,9 +495,10 @@ class SecondOrderSpikeSpectra(dj.Computed, PlotableSpectrum):
         t = np.arange(0, dat['duration'], dt)
         st = (Runs.SpikeTimes() & key).fetch(as_dict=True)
         st = [s['times'] / 1000 for s in st]  # convert to s
+        f_max = (SpectraParameters() & key).fetch1['f_max']
 
         key['frequencies'], key['vector_strengths'], key['critical_value'] = \
-            compute_2nd_order_spectrum(st, t, 1 / dt, alpha=0.001, method='poisson')
+            compute_2nd_order_spectrum(st, t, 1 / dt, alpha=0.001, method='poisson', f_max=f_max)
         self.insert1(key)
 
 
@@ -537,8 +538,9 @@ class FirstOrderSignificantPeaks(dj.Computed):
         interesting_frequencies = {'stimulus_coeff': run['eod'] + run['delta_f'], 'eod_coeff': run['eod'],
                                    'baseline_coeff': cell['baseline']}
 
+        f_max = (SpectraParameters() & key).fetch1['f_max']
         sas = find_significant_peaks(spikes, data['frequencies'], data['vector_strengths'],
-                                     interesting_frequencies, data['critical_value'])
+                                     interesting_frequencies, data['critical_value'], upper_cutoff=f_max)
         for s in sas:
             s.update(key)
             try:
@@ -582,9 +584,9 @@ class SecondOrderSignificantPeaks(dj.Computed):
 
         interesting_frequencies = {'stimulus_coeff': run['eod'] + run['delta_f'], 'eod_coeff': run['eod'],
                                    'baseline_coeff': cell['baseline']}
-
+        f_max = (SpectraParameters() & key).fetch1['f_max']
         sas = find_significant_peaks(spikes, data['frequencies'], data['vector_strengths'],
-                                     interesting_frequencies, data['critical_value'])
+                                     interesting_frequencies, data['critical_value'], upper_cutoff=f_max)
         for s in sas:
             s.update(key)
 
@@ -720,7 +722,7 @@ class EODStimulusPSTSpikes(dj.Computed):
     def key_source(self):
         constr = dict(stimulus_coeff=1, baseline_coeff=0, eod_coeff=0, refined=1)
         cell_type = Cells() & dict(cell_type='p-unit')
-        return FirstOrderSignificantPeaks() & cell_type & constr
+        return FirstOrderSignificantPeaks()*CoincidenceTolerance() & cell_type & constr
 
     def _make_tuples(self, key):
         # key_sub = dict(key)
@@ -745,7 +747,7 @@ class EODStimulusPSTSpikes(dj.Computed):
             spikes = []
 
             for train, in_phase in zip(times, p0):
-                train /= 1000  # convert to seconds
+                train = np.asarray(train)/1000  # convert to seconds
                 for phase in in_phase:
                     chunk = train[(train >= phase - whs) & (train <= phase + whs)] - phase
                     if len(chunk) > 0:
