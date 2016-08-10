@@ -443,7 +443,7 @@ class SecondOrderSpikeSpectra(dj.Computed, PlotableSpectrum):
 
     @property
     def key_source(self):
-        return Runs() & dict(am=0)
+        return Runs()*SpectraParameters() & dict(am=0)
 
     @staticmethod
     def compute_2nd_order_spectrum(spikes, t, sampling_rate, alpha=0.001, method='poisson', f_max=2000):
