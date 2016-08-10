@@ -23,16 +23,21 @@ class Figure04:
                 'real_spike_spectrum': self.ax[3],
             }
             with sns.axes_style('ticks'):
-                self.ax['real_isi'] = inset_axes(self.ax['real_spike_spectrum'], width= .6, height=.6, loc=1)
-                self.ax['sim_isi'] = inset_axes(self.ax['sim_spike_spectrum'], width= .6, height=.6, loc=1)
-
+                self.ax['sim_isi'] = inset_axes(self.ax['sim_spike_spectrum'], width=.6, height=.6, loc=1 ,
+                                                bbox_to_anchor=(1.15, 1.1),
+                                                bbox_transform=self.ax['sim_spike_spectrum'].transAxes
+                                                )
+                self.ax['real_isi'] = inset_axes(self.ax['real_spike_spectrum'], width=.6, height=.6, loc=1,
+                                                 bbox_to_anchor=(1.15, 1.1),
+                                                 bbox_transform=self.ax['real_spike_spectrum'].transAxes
+                                                 )
 
         return self.fig, self.ax
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         fig, ax = self.fig, self.ax
 
-        ax['real_spike_spectrum'].set_ylim((0,1.5))
+        ax['real_spike_spectrum'].set_ylim((0, 1.5))
         sns.despine(ax=ax['stimulus_spectrum'], left=True, offset=0)
         ax['stimulus_spectrum'].set_xticklabels([])
         sns.despine(ax=ax['membrane_spectrum'], left=True, offset=0)
@@ -42,40 +47,47 @@ class Figure04:
         ax['real_spike_spectrum'].set_xlabel('frequency [Hz]')
         ax['real_spike_spectrum'].set_yticks([0, .5, 1])
 
-
         for a in ax.values():
             a.tick_params('both', length=3, width=1, which='both')
 
-
         fig.tight_layout()
         fig.subplots_adjust(right=0.80)
-        ax['real_spike_spectrum'].legend_.set_bbox_to_anchor((1.25,1))
-        ax['stimulus_spectrum'].legend_.set_bbox_to_anchor((1.2,1))
-        sns.despine(ax = self.ax['real_isi'], left=True, trim=True)
-        sns.despine(ax = self.ax['sim_isi'], left=True, trim=True)
+        ax['real_spike_spectrum'].legend_.set_bbox_to_anchor((1.25, .4),
+                                                             transform=ax['real_spike_spectrum'].transAxes)
+        ax['stimulus_spectrum'].legend_.set_bbox_to_anchor((1.2, 1))
+        sns.despine(ax=self.ax['real_isi'], left=True, trim=True)
+        sns.despine(ax=self.ax['sim_isi'], left=True, trim=True)
 
         self.ax['real_isi'].set_yticks([])
         self.ax['sim_isi'].set_yticks([])
+        self.ax['real_isi'].set_xticks(range(0,20,5))
+        # self.ax['sim_isi'].set_xticks(range(0,20,5))
 
         ax['stimulus_spectrum'].text(-0.1, 1, 'A', transform=ax['stimulus_spectrum'].transAxes, fontweight='bold')
         ax['membrane_spectrum'].text(-0.1, 1, 'B', transform=ax['membrane_spectrum'].transAxes, fontweight='bold')
         ax['sim_spike_spectrum'].text(-0.1, 1, 'C', transform=ax['sim_spike_spectrum'].transAxes, fontweight='bold')
         ax['real_spike_spectrum'].text(-0.1, 1, 'D', transform=ax['real_spike_spectrum'].transAxes, fontweight='bold')
 
-
         if self.filename is not None:
             self.fig.savefig(self.filename)
 
         plt.close(fig)
+
     def __call__(self, *args, **kwargs):
         return self
 
 
-for key in PUnitSimulations().project().fetch.as_dict:
+restrictions = dict(
+    id='nwgimproved',
+    cell_id='2014-12-03-ai',
+    run_id=13
+)
+for key in (PUnitSimulations() & restrictions).fetch.keys():
+    print('Processing', key)
     dir = 'figures/figure04/' + key['id']
     mkdir(dir)
     df = (Runs() & key).fetch1['delta_f']
-    with Figure04(filename=dir + '/figure04_' + key['cell_id'] +'df_'+ str(df) + '.pdf') as (fig, ax):
+    with Figure04(filename=dir + '/figure04_' + key['cell_id'] + 'df_' + str(df) + '.pdf') as (fig, ax):
         PUnitSimulations().plot_stimulus_spectrum(key, ax['stimulus_spectrum'])
         PUnitSimulations().plot_membrane_potential_spectrum(key, ax['membrane_spectrum'])
         PUnitSimulations().plot_spike_spectrum(key, ax['sim_spike_spectrum'])

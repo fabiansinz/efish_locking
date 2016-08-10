@@ -13,13 +13,6 @@ rel = Runs() * SecondOrderSignificantPeaks() * StimulusSpikeJitter() * Cells() \
              cell_type='p-unit', am=0, n_harmonics=0) \
       & 'stimulus_coeff > 0' \
       & 'frequency > 0'
-#----------------------------------
-# TODO: Remove this later
-from IPython import embed
-embed()
-# exit()
-#----------------------------------
-
 
 df = pd.DataFrame(rel.fetch())
 
