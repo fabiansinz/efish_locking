@@ -291,6 +291,7 @@ class SpectraParameters(dj.Lookup):
 
 
 @schema
+@gitlog
 class TrialAlign(dj.Computed):
     definition = """
     # computes a time point where the EOD and the stimulus coincide
@@ -353,6 +354,7 @@ class TrialAlign(dj.Computed):
 
 
 @schema
+@gitlog
 class FirstOrderSpikeSpectra(dj.Computed, PlotableSpectrum):
     definition = """
     # table that holds 1st order vector strength spectra
@@ -613,6 +615,7 @@ class SamplingPointsPerBin(dj.Lookup):
 
 
 @schema
+@gitlog
 class PhaseLockingHistogram(dj.Computed):
     definition = """
     # phase locking histogram at significant peaks
