@@ -358,6 +358,7 @@ class FirstOrderSpikeSpectra(dj.Computed, PlotableSpectrum):
     # table that holds 1st order vector strength spectra
 
     -> Runs                         # each run has a spectrum
+    -> SpectraParameters
     ---
 
     frequencies             : longblob # frequencies at which the spectra are computed
@@ -367,7 +368,7 @@ class FirstOrderSpikeSpectra(dj.Computed, PlotableSpectrum):
 
     @property
     def key_source(self):
-        return Runs() & TrialAlign() & dict(am=0)
+        return Runs()*SpectraParameters() & TrialAlign() & dict(am=0)
 
     @staticmethod
     def compute_1st_order_spectrum(aggregated_spikes, sampling_rate, duration, alpha=0.001, f_max=2000):
@@ -392,7 +393,7 @@ class FirstOrderSpikeSpectra(dj.Computed, PlotableSpectrum):
     def _make_tuples(self, key):
         print('Processing', key['cell_id'], 'run', key['run_id'], )
         samplingrate, duration = (Runs() & key).fetch1['samplingrate', 'duration']
-        f_max = SpectraParameters().fetch1['f_max']
+        f_max = (SpectraParameters() & key).fetch1['f_max']
 
         aggregated_spikes = np.hstack(TrialAlign().load_trials(key))
         key['frequencies'], key['vector_strengths'], key['critical_value'] = \
@@ -422,7 +423,6 @@ class StimulusSpikeJitter(dj.Computed):
 
     def _make_tuples(self, key):
         print('Processing', key['cell_id'], 'run', key['run_id'], )
-        dt = 1. / (Runs() & key).fetch1['samplingrate']
         eod = (Runs() & key).fetch1['eod']
 
         aggregated_spikes = np.hstack(TrialAlign().load_trials(key))
@@ -471,6 +471,7 @@ class BaselineSpikeJitter(dj.Computed):
 
 
 @schema
+@gitlog
 class SecondOrderSpikeSpectra(dj.Computed, PlotableSpectrum):
     definition = """
     # table that holds 2nd order vector strength spectra
@@ -501,6 +502,7 @@ class SecondOrderSpikeSpectra(dj.Computed, PlotableSpectrum):
 
 
 @schema
+@gitlog
 class FirstOrderSignificantPeaks(dj.Computed):
     definition = """
     # hold significant peaks in spektra
@@ -549,6 +551,7 @@ class FirstOrderSignificantPeaks(dj.Computed):
 
 
 @schema
+@gitlog
 class SecondOrderSignificantPeaks(dj.Computed):
     definition = """
     # hold significant peaks in spektra
@@ -696,6 +699,7 @@ class PhaseLockingHistogram(dj.Computed):
 
 
 @schema
+@gitlog
 class EODStimulusPSTSpikes(dj.Computed):
     definition = """
     # PSTH of Stimulus and EOD at the difference frequency of both
@@ -803,6 +807,7 @@ class EODStimulusPSTSpikes(dj.Computed):
 
 
 @schema
+@gitlog
 class Decoding(dj.Computed):
     definition = """
     # locking by decoding time

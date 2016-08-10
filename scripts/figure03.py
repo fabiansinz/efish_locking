@@ -8,7 +8,6 @@ def count(gr):
     gr['elements'] = len(gr)
     return gr
 
-#  - 'cell_id="2014-06-06-ak"' \
 rel = Runs() * SecondOrderSignificantPeaks() * StimulusSpikeJitter() * Cells() \
       & dict(eod_coeff=0, baseline_coeff=0, refined=1, \
              cell_type='p-unit', am=0, n_harmonics=0) \
@@ -17,6 +16,7 @@ rel = Runs() * SecondOrderSignificantPeaks() * StimulusSpikeJitter() * Cells() \
 
 
 df = pd.DataFrame(rel.fetch())
+
 print("n={0} cells".format(len(Cells() & rel)))
 print("n={0} trials".format(len(Runs() & rel)))
 df['spread'] = df['stim_std'] / df['eod'] / 2 / np.pi
@@ -54,7 +54,6 @@ for a in ax.values():
 ax['stimulus'].set_ylim((0, 1))
 ax['cstd'].set_xlim((0, 3.5))
 ax['cstd'].set_xticks([0, 1, 2, 3])
-# sns.despine(ax=ax['cstd'], trim=True, left=True)
 ax['contrast'].set_xlim((-0.5, 4.5))
 ax['stimulus'].set_xlim((0, 2400))
 
