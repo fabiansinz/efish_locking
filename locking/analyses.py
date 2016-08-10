@@ -69,6 +69,10 @@ def compute_2nd_order_spectrum(spikes, t, sampling_rate, alpha=0.001, method='po
     return freqs, m_ampl, y
 
 
+def vector_strength_at(f, trial):
+    return 1 - circ.var((trial % (1. / f)) * f * 2 * np.pi)
+
+
 def _neg_vs_at(f, spikes):
     return -np.mean([1 - circ.var((trial % (1. / f)) * f * 2 * np.pi) for trial in spikes])
 
@@ -180,14 +184,18 @@ def find_significant_peaks(spikes, w, spectrum, peak_dict, threshold, tol=3.,
 
 
 class PlotableSpectrum:
+    colors = [sns.xkcd_rgb[c] for c in ["windows blue", "amber", "greyish", "faded green", "dusty purple"]]
+
     def plot(self, ax, restrictions, f_max=2000):
         sns.set_context('paper')
         # colors = ['#1b9e77', '#d95f02', '#7570b3', '#e7298a']
-        colors = ['deeppink', 'dodgerblue', sns.xkcd_rgb['mustard'], sns.xkcd_rgb['steel grey']]
-        markers = ['*', '^', 'D', 'o']
+        # colors = ['deeppink', 'dodgerblue', sns.xkcd_rgb['mustard'], sns.xkcd_rgb['steel grey']]
+
+
+        markers = ['*', '^', 'D', 'h', 'o']
         stim, eod, baseline, beat = sympy.symbols('f_s, f_e, f_b, \Delta')
 
-        for fos in ((self * Runs()).project() & restrictions).fetch.as_dict:
+        for fos in ((self * Runs()).proj() & restrictions).fetch.as_dict:
             if isinstance(self, FirstOrderSpikeSpectra):
                 peaks = (FirstOrderSignificantPeaks() & fos & restrictions)
             elif isinstance(self, SecondOrderSpikeSpectra):
@@ -237,14 +245,19 @@ class PlotableSpectrum:
 
                     # use different colors and labels depending on the frequency
                     if cs != 0 and ce == 0 and cb == 0:
-                        ax.plot(freq, vs, 'k', mfc=colors[0], label='stimulus', marker=markers[0], linestyle='None')
+                        ax.plot(freq, vs, 'k', mfc=self.colors[0], label='stimulus', marker=markers[0],
+                                linestyle='None')
                     elif cs == 0 and ce != 0 and cb == 0:
-                        ax.plot(freq, vs, 'k', mfc=colors[1], label='EOD', marker=markers[1], linestyle='None')
+                        ax.plot(freq, vs, 'k', mfc=self.colors[1], label='EOD', marker=markers[1], linestyle='None')
                     elif cs == 0 and ce == 0 and cb != 0:
-                        ax.plot(freq, vs, 'k', mfc=colors[2], label='baseline firing', marker=markers[2],
+                        ax.plot(freq, vs, 'k', mfc=self.colors[2], label='baseline firing', marker=markers[2],
+                                linestyle='None')
+                    elif cs == 1 and ce == -1 and cb == 0:
+                        ax.plot(freq, vs, 'k', mfc=self.colors[3], label=r'$\Delta f$', marker=markers[3],
                                 linestyle='None')
                     else:
-                        ax.plot(freq, vs, 'k', mfc=colors[3], label='combinations', marker=markers[3], linestyle='None')
+                        ax.plot(freq, vs, 'k', mfc=self.colors[4], label='combinations', marker=markers[4],
+                                linestyle='None')
                     ax.text(freq, vs + .05, r'$%s=%.1f$Hz' % (term, freq), fontsize=5, rotation=80,
                             ha='left',
                             va='bottom')
@@ -296,7 +309,7 @@ class TrialAlign(dj.Computed):
         tol = CoincidenceTolerance().fetch1['tol']
         samplingrate = (Runs() & key).fetch1['samplingrate']
         trials = GlobalEODPeaksTroughs() * \
-                 GlobalEFieldPeaksTroughs().project(stim_peaks='peaks') * \
+                 GlobalEFieldPeaksTroughs().proj(stim_peaks='peaks') * \
                  Runs.SpikeTimes() & key
 
         ep, sp = trials.fetch1['peaks', 'stim_peaks']
@@ -354,7 +367,7 @@ class FirstOrderSpikeSpectra(dj.Computed, PlotableSpectrum):
 
     @property
     def key_source(self):
-        return Runs() & TrialAlign()
+        return Runs() & TrialAlign() & dict(am=0)
 
     @staticmethod
     def compute_1st_order_spectrum(aggregated_spikes, sampling_rate, duration, alpha=0.001, f_max=2000):
@@ -469,6 +482,10 @@ class SecondOrderSpikeSpectra(dj.Computed, PlotableSpectrum):
     vector_strengths        : longblob # vector strengths at those frequencies
     critical_value          : float    # critical value for significance with alpha=0.001
     """
+
+    @property
+    def key_source(self):
+        Runs() & dict(am=0)
 
     def _make_tuples(self, key):
         print('Processing', key['cell_id'], 'run', key['run_id'], )
@@ -714,7 +731,7 @@ class EODStimulusPSTSpikes(dj.Computed):
 
             whs = 10 * eod_period
             times, peaks, epeaks = (Runs.SpikeTimes() * GlobalEODPeaksTroughs() \
-                                    * GlobalEFieldPeaksTroughs().project(epeaks='peaks') \
+                                    * GlobalEFieldPeaksTroughs().proj(epeaks='peaks') \
                                     & key).fetch['times', 'peaks', 'epeaks']
 
             p0 = [peaks[i][
@@ -742,7 +759,7 @@ class EODStimulusPSTSpikes(dj.Computed):
                 self.insert1(key)
 
     def plot(self, ax, restrictions, coincidence=0.0001):
-        rel = self * CoincidenceTolerance() * Runs().project('delta_f') & restrictions & dict(tol=coincidence)
+        rel = self * CoincidenceTolerance() * Runs().proj('delta_f') & restrictions & dict(tol=coincidence)
         df = pd.DataFrame(rel.fetch())
         df['adelta_f'] = np.abs(df.delta_f)
         df['sdelta_f'] = np.sign(df.delta_f)
@@ -783,3 +800,63 @@ class EODStimulusPSTSpikes(dj.Computed):
             ax.set_yticks(0.5 * (y[1:] + y[:-1]))
             ax.set_yticklabels(yticks)
             ax.set_ylim(y[[0, -1]])
+
+
+@schema
+class Decoding(dj.Computed):
+    definition = """
+    # locking by decoding time
+
+    -> Runs
+    -> SecondOrderSignificantPeaks
+    ---
+    beat                    : float    # refined beat frequency
+    stimulus                : float    # refined stimulus frequency
+    """
+
+    class Beat(dj.Part):
+        definition = """
+        -> Decoding
+        -> Runs.SpikeTimes
+        ---
+        vs_beat                 : float # vector strength for full trial
+        """
+
+    class Stimulus(dj.Part):
+        definition = """
+        -> Decoding
+        -> Runs.SpikeTimes
+        ---
+        vs_stimulus             : float # vector strength for full trial
+        """
+
+    @property
+    def key_source(self):
+        return Runs() * SecondOrderSignificantPeaks() \
+               & dict(cell_type='p-unit', ) \
+               & dj.OrList([dict(refined=True, stimulus_coeff=1, eod_coeff=0, baseline_coeff=0, am=0, n_harmonics=0),
+                            dict(refined=True, stimulus_coeff=1, eod_coeff=-1, baseline_coeff=0, am=0, n_harmonics=0)])
+
+    def plot_locking_difference(self, ax, **kwargs):
+        stim, beat = (self * self.Beat() * self.Stimulus()).fetch['vs_stimulus', 'vs_beat']
+        ax.hist(stim - beat, **kwargs)
+        ax.set_xlabel('vector strength difference stimulus - beat')
+        return stats.ttest_rel(stim, beat), (stim - beat).mean()
+
+    def _make_tuples(self, key):
+        print('Processing', key['cell_id'], 'run', key['run_id'], )
+        dat = (Runs() & key).fetch(as_dict=True)[0]
+
+        spike_times, trial_ids = (Runs.SpikeTimes() & key).fetch['times', 'trial_id']
+        spike_times = [s / 1000 for s in spike_times]  # convert to s
+
+        # refine delta f locking on all spikes
+        delta_f = find_best_locking(spike_times, [dat['delta_f']], tol=3)[0][0]
+        stimulus_frequency = find_best_locking(spike_times, [dat['delta_f'] + dat['eod']], tol=3)[0][0]
+
+        self.insert1(dict(key, beat=delta_f, stimulus=stimulus_frequency))
+        stim = self.Stimulus()
+        beat = self.Beat()
+        for key['trial_id'], trial in zip(trial_ids, spike_times):
+            stim.insert1(dict(key, vs_stimulus=vector_strength_at(stimulus_frequency, trial)))
+            beat.insert1(dict(key, vs_beat=vector_strength_at(delta_f, trial)))
