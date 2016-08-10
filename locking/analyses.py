@@ -497,7 +497,7 @@ class SecondOrderSpikeSpectra(dj.Computed, PlotableSpectrum):
         dt = 1 / dat['samplingrate']
         t = np.arange(0, dat['duration'], dt)
         st = (Runs.SpikeTimes() & key).fetch(as_dict=True)
-        st = [s['times'] / 1000 for s in st]  # convert to s
+        st = [s['times'] / 1000 for s in st if len(s) > 0]  # convert to s and drop empty trials
         f_max = (SpectraParameters() & key).fetch1['f_max']
 
         key['frequencies'], key['vector_strengths'], key['critical_value'] = \

@@ -7,12 +7,44 @@ from locking.data import Runs, LocalEODPeaksTroughs, GlobalEFieldPeaksTroughs
 
 server = schema('efish_tests', locals())
 import numpy as np
-import unittest
+
 
 TOL = 3
 
 @server
-class PeakTroughCheck(dj.Computed, unittest.TestCase):
+class SpikeCheck(dj.Computed):
+    definition = """
+    -> Runs
+    ---
+    all_zeros   : smallint  # whether all spike times are zero
+    """
+
+    class SpikeCount(dj.Part):
+        definition = """
+        -> SpikeCheck
+        -> Runs.SpikeTimes
+        ---
+        spike_count   : int
+        is_empty      : smallint
+        """
+
+    def _make_tuples(self, key):
+        print('Processing', key)
+        st, keys = (Runs()*Runs.SpikeTimes() & key).fetch['times', dj.key]
+
+        key['all_zeros'] = 1*np.all(np.abs(np.hstack(st)) < 1e-12)
+        self.insert1(key)
+        sc = self.SpikeCount()
+        for k, s in zip(keys, st):
+            k['spike_count'] = len(s)
+            k['is_empty'] = (((len(s) == 1) & np.all(s < 1e-12)) | (len(s) == 0))*1
+            sc.insert1(k)
+
+
+
+
+@server
+class PeakTroughCheck(dj.Computed):
     definition = """
     ->Runs
 
@@ -43,8 +75,8 @@ class PeakTroughCheck(dj.Computed, unittest.TestCase):
         """
 
     @property
-    def populated_from(self):
-        return Runs() & 'am=0'
+    def key_source(self):
+        return Runs() & dict(am=0, n_harmonics=0)
 
     def _make_tuples(self, key):
         dat_eod = (Runs() * LocalEODPeaksTroughs() & key).fetch()
@@ -115,8 +147,6 @@ class PeakTroughCheck(dj.Computed, unittest.TestCase):
             & '(ABS(frequency - eod_frequency_peak) > %(tol)f) or (ABS(frequency - eod_frequency_trough) > %(tol)f)' % dict(tol=TOL)
 
     # ------------ testing --------------
-    def setUp(self):
-        self.populate()
 
     def test_relacs_peakdet_consistency(self):
         """Test whether the frequencies from relacs and peakdet are the same"""
@@ -126,24 +156,39 @@ class PeakTroughCheck(dj.Computed, unittest.TestCase):
         m = np.max([np.abs(df.eod - df.eod_frequency_peak), np.abs(df.eod - df.eod_frequency_trough),
                     np.abs(df.eod + df.delta_f - df.stimulus_frequency_peak),
                     np.abs(df.eod + df.delta_f - df.stimulus_frequency_trough), ])
-        self.assertTrue(n == 0, '%i tuples deviate in frequency estimates by more than %iHz (maxdev %.4fHz)' % (n, TOL, m))
+        assert n == 0, '%i tuples deviate in frequency estimates by more than %iHz (maxdev %.4fHz)' % (n, TOL, m)
 
     def test_1st_order_eod(self):
         rel = self.inconsistent_peakdet_spikelocking_runs_eod
         n = len(rel)
-        self.assertTrue(n == 0, '%i tuples deviate in eod estimates by more than %iHz' % (n, TOL))
+        assert n == 0, '%i tuples deviate in eod estimates by more than %iHz' % (n, TOL)
 
     def test_1st_order_stimulus(self):
         rel = self.inconsistent_peakdet_spikelocking_runs_stimulus
         n = len(rel)
-        self.assertTrue(n == 0, '%i tuples deviate in eod estimates by more than %iHz' % (n, TOL))
+        assert  n == 0, '%i tuples deviate in eod estimates by more than %iHz' % (n, TOL)
 
     def test_2nd_order_eod(self):
         rel = self.inconsistent_2nd_order_peakdet_spikelocking_runs_stimulus
         n = len(rel)
-        self.assertTrue(n == 0, '%i tuples deviate in eod estimates by more than %iHz' % (n, TOL))
+        assert n == 0, '%i tuples deviate in eod estimates by more than %iHz' % (n, TOL)
 
     def test_2nd_order_stimulus(self):
         rel = self.inconsistent_2nd_order_peakdet_spikelocking_runs_eod
         n = len(rel)
-        self.assertTrue(n == 0, '%i tuples deviate in eod estimates by more than %iHz' % (n, TOL))
+        assert  n == 0, '%i tuples deviate in eod estimates by more than %iHz' % (n, TOL)
+
+
+    def test(self):
+        self.populate()
+        self.test_relacs_peakdet_consistency()
+        self.test_1st_order_eod()
+        self.test_1st_order_stimulus()
+        self.test_2nd_order_eod()
+        self.test_2nd_order_stimulus()
+
+
+if __name__ == '__main__':
+
+    PeakTroughCheck().populate()
+    PeakTroughCheck().test()

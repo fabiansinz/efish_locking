@@ -26,39 +26,39 @@ class Figure05(FormatedFigure):
         sns.set_context('paper')
         with plt.rc_context(plot_params):
             self.fig = plt.figure(figsize=(7, 7))
-            gs = plt.GridSpec(3, 3)
+            gs = plt.GridSpec(3, 12)
             self.ax = {
-                'spectrum': self.fig.add_subplot(gs[:2, :2]),
-                'ISI': self.fig.add_subplot(gs[0, 2]),
-                'FI': self.fig.add_subplot(gs[1, 2]),
-                'vs_freq': self.fig.add_subplot(gs[2, 0]),
+                'spectrum': self.fig.add_subplot(gs[:2, 4:]),
+                'ISI': self.fig.add_subplot(gs[0, :4]),
+                'FI': self.fig.add_subplot(gs[1, :4]),
+                'vs_freq': self.fig.add_subplot(gs[2, :4]),
             }
-            self.ax['circ'] = self.fig.add_subplot(gs[2, 1])
-            self.ax['contrast'] = self.fig.add_subplot(gs[2, 2])
+            self.ax['circ'] = self.fig.add_subplot(gs[2, 4:8])
+            self.ax['contrast'] = self.fig.add_subplot(gs[2, 8:])
 
     @staticmethod
     def format_ISI(ax):
         sns.despine(ax=ax, left=True, trim=True)
         ax.set_yticks([])
         ax.set_xlim((0, 15))
-        ax.text(-0.2, 1, 'B', transform=ax.transAxes, fontweight='bold')
+        ax.text(-0.2, 1, 'A', transform=ax.transAxes, fontweight='bold')
 
     @staticmethod
     def format_spectrum(ax):
         ax.set_xlim((0, 2400))
         ax.tick_params('x', length=3, width=1)
         ax.spines['bottom'].set_linewidth(1)
-        ax.legend(bbox_to_anchor=(1.1, 1), bbox_transform=ax.transAxes)
+        ax.legend(loc='top left', bbox_to_anchor=(1.1, 1), bbox_transform=ax.transAxes)
         sns.despine(ax=ax, left=True, trim=True, offset=5)
         ax.set_yticks([])
         ax.set_xlabel('frequency [Hz]')
-        ax.text(-.1, 1, 'A', transform=ax.transAxes, fontweight='bold')
+        ax.text(-0.05, 1, 'C', transform=ax.transAxes, fontweight='bold')
 
     @staticmethod
     def format_FI(ax):
         sns.despine(ax=ax)
         ax.legend(loc='upper right')
-        ax.text(-0.2, 1, 'C', transform=ax.transAxes, fontweight='bold')
+        ax.text(-0.2, 1, 'B', transform=ax.transAxes, fontweight='bold')
 
     @staticmethod
     def format_vs_freq(ax):
@@ -104,15 +104,15 @@ class Figure05(FormatedFigure):
 
     def format_figure(self):
         fig.tight_layout()
-        fig.subplots_adjust(left=0.1)
+        fig.subplots_adjust(left=0.075, right=0.95)
 
 
 if __name__ == "__main__":
     f_max = 2000  # Hz
     contrast = 20
-    restr = dict(cell_id='2014-11-26-ad', contrast=contrast, am=0, n_harmonics=0)
+    restr = dict(cell_id='2014-11-26-ad', contrast=contrast, am=0, n_harmonics=0, refined=True)
 
-    line_colors = sns.color_palette('pastel', n_colors=3)
+    line_colors = alys.PlotableSpectrum.colors
     target_trials = alys.FirstOrderSpikeSpectra() * data.Runs() & restr
 
     with Figure05(filename='figures/figure05.pdf') as (fig, ax):
@@ -137,15 +137,13 @@ if __name__ == "__main__":
             deltaf_freq.append(spec['delta_f'])
             eod_freq.append(spec['eod'])
 
-        ax['spectrum'].plot(eod_freq, y[:-1], '-', zorder=-1, lw=1, color=line_colors[0], label='EOD')
-        ax['spectrum'].plot(stim_freq, y[:-1], '-', zorder=-1, lw=1, color=line_colors[1], label='stimulus')
+        ax['spectrum'].plot(eod_freq, y[:-1], '-', zorder=-1, lw=1, color=line_colors[1], label='EOD')
+        ax['spectrum'].plot(stim_freq, y[:-1], '-', zorder=-1, lw=1, color=line_colors[0], label='stimulus')
         # ax['spectrum'].plot(np.abs(deltaf_freq), y[:-1], '-', zorder=-1, lw=1, color=line_colors[2],
         #                     label=r'$|\Delta f|$')
 
-        # --- scatter plots
         rel_pu = data.Runs() * alys.FirstOrderSignificantPeaks() * alys.StimulusSpikeJitter() * data.Cells() \
-                 & dict(eod_coeff=0, baseline_coeff=0, refined=1, \
-                        cell_type='p-unit', am=0, n_harmonics=0) \
+                 & dict(eod_coeff=0, baseline_coeff=0, refined=1, cell_type='p-unit', am=0, n_harmonics=0) \
                  & 'stimulus_coeff > 0' \
                  & 'frequency > 0'
 
@@ -154,8 +152,7 @@ if __name__ == "__main__":
         df_pu['jitter'] = df_pu['stim_std']  # rename to avoid conflict with std function
 
         rel_py = data.Runs() * alys.FirstOrderSignificantPeaks() * alys.StimulusSpikeJitter() * data.Cells() \
-                 & dict(eod_coeff=0, baseline_coeff=0, refined=1, \
-                        am=0, n_harmonics=0) \
+                 & dict(eod_coeff=0, baseline_coeff=0, refined=1, am=0, n_harmonics=0) \
                  & 'stimulus_coeff > 0' \
                  & 'frequency > 0' \
                  & ['cell_type="i-cell"', 'cell_type="e-cell"']

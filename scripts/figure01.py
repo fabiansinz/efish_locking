@@ -73,7 +73,7 @@ if __name__ == "__main__":
         unit = cell['cell_type']
         print('Processing', cell['cell_id'])
 
-        line_colors = sns.color_palette('pastel', n_colors=3)
+        # line_colors = sns.color_palette('pastel', n_colors=3)
         for spectrum, speaks, base_name in zip([FirstOrderSpikeSpectra(), SecondOrderSpikeSpectra()],
                                                [FirstOrderSignificantPeaks(), SecondOrderSignificantPeaks()],
                                                ['firstorderspectra', 'secondorderspectra']):

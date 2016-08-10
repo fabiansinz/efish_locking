@@ -68,6 +68,11 @@ class Figure04:
         ax['sim_spike_spectrum'].text(-0.1, 1, 'C', transform=ax['sim_spike_spectrum'].transAxes, fontweight='bold')
         ax['real_spike_spectrum'].text(-0.1, 1, 'D', transform=ax['real_spike_spectrum'].transAxes, fontweight='bold')
 
+        ax['real_spike_spectrum'].set_xticklabels(ax['real_spike_spectrum'].get_xticks())
+        for aname in ['stimulus_spectrum', 'membrane_spectrum', 'sim_spike_spectrum']:
+            for tk in  ax[aname].get_xticklabels():
+                tk.set_visible(False)
+
         if self.filename is not None:
             self.fig.savefig(self.filename)
 
