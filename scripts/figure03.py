@@ -4,9 +4,9 @@ import statsmodels.formula.api as smf
 
 from locking.analyses import *
 
-def count(gr):
-    gr['elements'] = len(gr)
-    return gr
+# def count(gr):
+#     gr['elements'] = len(gr)
+#     return gr
 
 rel = Runs() * SecondOrderSignificantPeaks() * StimulusSpikeJitter() * Cells() \
       & dict(eod_coeff=0, baseline_coeff=0, refined=1, \
@@ -36,9 +36,9 @@ fig.colorbar(sc, ax=ax['cstd'])
 ax['cstd'].axis('tight')
 ax['cstd'].set_xticks(ax['cstd'].get_xticks()[::2])
 
-df2 = df[df.stimulus_coeff == 1].groupby(['cell_id','contrast']).apply(count)
+# df2 = df[df.stimulus_coeff == 1].groupby(['cell_id']).apply(count)
 
-sns.pointplot('contrast', 'vector_strength', data=df2[df2.elements > 1],
+sns.pointplot('contrast', 'vector_strength', data=df[df.stimulus_coeff == 1],
               order=[2.5, 5, 10, 20], color='gray',
               ax=ax['contrast'], hue='cell_id',
               palette='Blues_d', join=True, scale=.5)

@@ -80,7 +80,7 @@ class Figure05(FormatedFigure):
         ax.set_xlabel('circular std')
 
         ax.set_yticks([])
-        ax.text(-0.2, 1, 'E', transform=ax.transAxes, fontweight='bold')
+        ax.text(-0.1, 1, 'E', transform=ax.transAxes, fontweight='bold')
         # ax.tick_params('y', length=0, width=0)
         ax.spines['bottom'].set_linewidth(1)
         sns.despine(ax=ax, left=True, trim=True)
@@ -92,7 +92,7 @@ class Figure05(FormatedFigure):
         ax.set_xlabel('contrast')
 
         ax.set_ylabel('')
-        ax.text(-0.2, 1, 'F', transform=ax.transAxes, fontweight='bold')
+        ax.text(-0.1, 1, 'F', transform=ax.transAxes, fontweight='bold')
         # ax.tick_params('y', length=0, width=0)
         ax.set_yticks([])
         handles, labels = ax.get_legend_handles_labels()
@@ -113,7 +113,9 @@ if __name__ == "__main__":
     restr = dict(cell_id='2014-11-26-ad', contrast=contrast, am=0, n_harmonics=0, refined=True)
 
     line_colors = alys.PlotableSpectrum.colors
+    # target_trials = alys.FirstOrderSpikeSpectra() * data.Runs() & restr
     target_trials = alys.FirstOrderSpikeSpectra() * data.Runs() & restr
+
 
     with Figure05(filename='figures/figure05.pdf') as (fig, ax):
         # --- plot ISI histogram
@@ -185,7 +187,6 @@ if __name__ == "__main__":
         df_pu['cell type'] = 'p-units'
         df_py['cell type'] = 'pyramidal'
         df = pd.concat([df_pu[df_pu.stimulus_coeff == 1], df_py[df_py.stimulus_coeff == 1]])
-
         for (c, ct), dat in df.groupby(['cell_id', 'cell type']):
             mu = dat.groupby('contrast').mean().reset_index()
             s = dat.groupby('contrast').std().reset_index()

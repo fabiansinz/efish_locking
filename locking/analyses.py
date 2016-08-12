@@ -21,8 +21,11 @@ from pycircstat import event_series as es
 schema = schema('efish_analyses', locals())
 
 
-def vector_strength_at(f, trial):
-    return 1 - circ.var((trial % (1. / f)) * f * 2 * np.pi)
+def vector_strength_at(f, trial, alpha=None):
+    if alpha is None:
+        return 1 - circ.var((trial % (1. / f)) * f * 2 * np.pi)
+    else:
+        return 1 - circ.var((trial % (1. / f)) * f * 2 * np.pi), np.sqrt(- np.log(alpha) / len(trial))
 
 
 def _neg_vs_at(f, spikes):
@@ -347,7 +350,7 @@ class FirstOrderSpikeSpectra(dj.Computed, PlotableSpectrum):
         return f, v, threshold
 
     def _make_tuples(self, key):
-        print('Processing', key['cell_id'], 'run', key['run_id'], )
+        print('Processing', key['cell_id'], 'run', key['run_id'],)
         samplingrate, duration = (Runs() & key).fetch1['samplingrate', 'duration']
         f_max = (SpectraParameters() & key).fetch1['f_max']
 
@@ -378,7 +381,7 @@ class StimulusSpikeJitter(dj.Computed):
         return Runs() & TrialAlign()
 
     def _make_tuples(self, key):
-        print('Processing', key['cell_id'], 'run', key['run_id'], )
+        print('Processing', key['cell_id'], 'run', key['run_id'],)
         eod = (Runs() & key).fetch1['eod']
 
         aggregated_spikes = np.hstack(TrialAlign().load_trials(key))
@@ -492,7 +495,7 @@ class SecondOrderSpikeSpectra(dj.Computed, PlotableSpectrum):
         return freqs[idx], m_ampl[idx], y
 
     def _make_tuples(self, key):
-        print('Processing', key['cell_id'], 'run', key['run_id'], )
+        print('Processing', key['cell_id'], 'run', key['run_id'],)
         dat = (Runs() & key).fetch(as_dict=True)[0]
         dt = 1 / dat['samplingrate']
         t = np.arange(0, dat['duration'], dt)
@@ -814,13 +817,22 @@ class EODStimulusPSTSpikes(dj.Computed):
 
 
 @schema
+class SignificanceLevel(dj.Lookup):
+    definition = """
+    alpha       : float
+    """
+
+    contents = [(0.05,)]
+
+
+@schema
 @gitlog
 class Decoding(dj.Computed):
     definition = """
     # locking by decoding time
 
     -> Runs
-    -> SecondOrderSignificantPeaks
+    -> SignificanceLevel
     ---
     beat                    : float    # refined beat frequency
     stimulus                : float    # refined stimulus frequency
@@ -831,7 +843,8 @@ class Decoding(dj.Computed):
         -> Decoding
         -> Runs.SpikeTimes
         ---
-        vs_beat                 : float # vector strength for full trial
+        crit_beat=null               : float # critical value for beat locking
+        vs_beat=null                 : float # vector strength for full trial
         """
 
     class Stimulus(dj.Part):
@@ -839,24 +852,16 @@ class Decoding(dj.Computed):
         -> Decoding
         -> Runs.SpikeTimes
         ---
-        vs_stimulus             : float # vector strength for full trial
+        crit_stimulus=null           : float # critical value for stimulus locking
+        vs_stimulus=null             : float # vector strength for full trial
         """
 
     @property
     def key_source(self):
-        return Runs() * SecondOrderSignificantPeaks() \
-               & dict(cell_type='p-unit', ) \
-               & dj.OrList([dict(refined=True, stimulus_coeff=1, eod_coeff=0, baseline_coeff=0, am=0, n_harmonics=0),
-                            dict(refined=True, stimulus_coeff=1, eod_coeff=-1, baseline_coeff=0, am=0, n_harmonics=0)])
-
-    def plot_locking_difference(self, ax, **kwargs):
-        stim, beat = (self * self.Beat() * self.Stimulus()).fetch['vs_stimulus', 'vs_beat']
-        ax.hist(stim - beat, **kwargs)
-        ax.set_xlabel('vector strength difference stimulus - beat')
-        return stats.ttest_rel(stim, beat), (stim - beat).mean()
+        return Runs() * SignificanceLevel() & dict(cell_type='p-unit')
 
     def _make_tuples(self, key):
-        print('Processing', key['cell_id'], 'run', key['run_id'], )
+        print('Processing', key['cell_id'], 'run', key['run_id'],)
         dat = (Runs() & key).fetch(as_dict=True)[0]
 
         spike_times, trial_ids = (Runs.SpikeTimes() & key).fetch['times', 'trial_id']
@@ -870,5 +875,11 @@ class Decoding(dj.Computed):
         stim = self.Stimulus()
         beat = self.Beat()
         for key['trial_id'], trial in zip(trial_ids, spike_times):
-            stim.insert1(dict(key, vs_stimulus=vector_strength_at(stimulus_frequency, trial)))
-            beat.insert1(dict(key, vs_beat=vector_strength_at(delta_f, trial)))
+            v, c = vector_strength_at(stimulus_frequency, trial, alpha=key['alpha'])
+            if np.isinf(c):
+                c = np.NaN
+            stim.insert1(dict(key, vs_stimulus=v, crit_stimulus=c))
+            v, c = vector_strength_at(delta_f, trial, alpha=key['alpha'])
+            if np.isinf(c):
+                c = np.NaN
+            beat.insert1(dict(key, vs_beat=v, crit_beat=c))
