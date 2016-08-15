@@ -243,9 +243,12 @@ class EODFit(dj.Computed):
             ret = ret + VS + VC
         return ret
 
-    def eod_func(self, key):
+    def eod_func(self, key, fundamental=None, harmonics = None):
         harm_coeff = np.vstack((EODFit.Harmonic() & key).fetch.order_by('harmonic')['sin', 'cos']).T
-        fundamental = (self & key).fetch1['fundamental']
+        if harmonics is not None:
+            harm_coeff = harm_coeff[:harmonics+1, :]
+        if fundamental is None:
+            fundamental = (self & key).fetch1['fundamental']
 
         A = np.sqrt(np.sum(harm_coeff[0, :] ** 2))
 
@@ -258,6 +261,19 @@ class EODFit(dj.Computed):
             return ret
 
         return ret_func
+
+    def plot_eods(self,fundamental=800, outdir='./'):
+        t = np.linspace(0,10/800,200)
+        for key in self.fetch.keys():
+            print('Plotting', key)
+            f = self.eod_func(key, fundamental=fundamental)
+            fig, ax = plt.subplots()
+            ax.plot(t, f(t),'-k')
+            ax.set_xlabel('time [s]')
+            ax.set_ylabel('EOD')
+            fig.savefig(outdir + '/{fish_id}.png'.format(**key))
+            plt.close(fig)
+            
 
 
 @schema
@@ -347,6 +363,14 @@ class LIFPUnit(dj.Computed):
 
         return tuple(np.asarray(e) for e in ret), Vin
 
+@schema
+class HarmonicStimulation(dj.Lookup):
+    definition = """
+    harmonic_stimulation  : smallint # 0 if only fundamental was used for stimulation and 1 if all harmonics were used
+    ---
+    """
+
+    contents = [(0,),(1,)]
 
 @schema
 @gitlog
@@ -356,16 +380,18 @@ class PUnitSimulations(dj.Computed):
 
     ->LIFPUnit
     ->Runs
+    -> HarmonicStimulation
     ---
-    dt              : double # time resolution for differential equation
-    duration        : double # duration of trial in seconds
+    dt                    : double # time resolution for differential equation
+    duration              : double # duration of trial in seconds
     """
 
     @property
     def key_source(self):
-        return (LIFPUnit() * Runs() * Cells() & dict(am=0, n_harmonics=0, cell_type='p-unit', contrast=20)).project()
+        return LIFPUnit() * Runs() * Cells()*HarmonicStimulation() & dict(am=0, n_harmonics=0, cell_type='p-unit', contrast=20)
 
     def _make_tuples(self, key):
+        print('Populating',dict(key))
         dt, duration = 0.000005, 1
         trials = 50
         ikey = dict(key)
@@ -380,10 +406,16 @@ class PUnitSimulations(dj.Computed):
         t = np.arange(0, duration, dt)
 
         baseline = EODFit().eod_func(key)
+        if key['harmonic_stimulation'] == 1:
+            foreign_eod = EODFit().eod_func(dict(fish_id='2014lepto0021'), fundamental=other_eod)
+        else:
+            foreign_eod = EODFit().eod_func(dict(fish_id='2014lepto0021'), fundamental=other_eod, harmonics=0)
         bl = baseline(t)
-        fac = (bl.max() - bl.min()) * 0.2 / 2
-        stimulus = lambda tt: baseline(tt) + fac * np.sin(2 * np.pi * other_eod * tt)
-
+        foreign = foreign_eod(t)
+        fac = (bl.max() - bl.min()) * 0.2 / (foreign.max() - foreign.min())
+        #stimulus = lambda tt: baseline(tt) + fac * np.sin(2 * np.pi * other_eod * tt)
+        stimulus = lambda tt: baseline(tt) + fac * foreign_eod(tt)
+        
         spikes_base, membran_base = LIFPUnit().simulate(key, trials, t, baseline)
         spikes_stim, membran_stim = LIFPUnit().simulate(key, trials, t, stimulus)
 
