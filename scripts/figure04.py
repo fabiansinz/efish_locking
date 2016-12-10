@@ -1,3 +1,4 @@
+import itertools
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 
 from locking import mkdir
@@ -81,23 +82,27 @@ class Figure04:
     def __call__(self, *args, **kwargs):
         return self
 
+for ri, hs in itertools.product([5,15],[0,1]):
+    restrictions = dict(
+        id='nwgimproved',
+        cell_id='2014-12-03-ai',
+        # run_id=13,
+        run_id=ri,
+        harmonic_stimulation=hs
 
-restrictions = dict(
-    id='nwgimproved',
-    cell_id='2014-12-03-ai',
-    run_id=13
-)
-for key in (PUnitSimulations() & restrictions).fetch.keys():
-    print('Processing', key)
-    dir = 'figures/figure04/' + key['id']
-    mkdir(dir)
-    df = (Runs() & key).fetch1['delta_f']
-    with Figure04(filename=dir + '/figure04_' + key['cell_id'] + 'df_' + str(df) + '.pdf') as (fig, ax):
-        PUnitSimulations().plot_stimulus_spectrum(key, ax['stimulus_spectrum'])
-        PUnitSimulations().plot_membrane_potential_spectrum(key, ax['membrane_spectrum'])
-        PUnitSimulations().plot_spike_spectrum(key, ax['sim_spike_spectrum'])
+    )
 
-        restrictions = dict(key, refined=True)
-        SecondOrderSpikeSpectra().plot(ax['real_spike_spectrum'], restrictions, f_max=2000)
-        ISIHistograms().plot(ax['real_isi'], restrictions)
-        PUnitSimulations().plot_isi(key, ax['sim_isi'])
+    for key in (PUnitSimulations() & restrictions).fetch.keys():
+        print('Processing', key)
+        dir = 'figures/figure04/' + key['id']
+        mkdir(dir)
+        df = (Runs() & key).fetch1['delta_f']
+        with Figure04(filename='{dir}/figure04_{cell_id}_{df}_harmonics{harmonic_stimulation}.png'.format(dir=dir, df=df, **key)) as (fig, ax):
+            PUnitSimulations().plot_stimulus_spectrum(key, ax['stimulus_spectrum'])
+            PUnitSimulations().plot_membrane_potential_spectrum(key, ax['membrane_spectrum'])
+            PUnitSimulations().plot_spike_spectrum(key, ax['sim_spike_spectrum'])
+
+            restrictions = dict(key, refined=True)
+            SecondOrderSpikeSpectra().plot(ax['real_spike_spectrum'], restrictions, f_max=2000)
+            ISIHistograms().plot(ax['real_isi'], restrictions)
+            PUnitSimulations().plot_isi(key, ax['sim_isi'])

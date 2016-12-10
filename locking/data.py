@@ -888,12 +888,13 @@ class Baseline(dj.Imported):
 
         period = 1 / eod
         t = (spikes % period)
+        print('Vector strength', circ.vector_strength(t/period * 2 * np.pi))
         ax.hist(t, bins=50, color='silver', lw=0, normed=True)
         ax.set_xlim((0, period))
         ax.set_xlabel('EOD cycle', labelpad=-5)
         ax.set_xticks([0, period])
         ax.set_xticklabels([0, 1])
-        ax.set_ylabel('PSTH')
+        # ax.set_ylabel('PSTH')
         ax.set_yticks([])
 
     def _make_tuples(self, key):
@@ -1060,6 +1061,17 @@ class Runs(dj.Imported):
 
         membrane_potential                      : longblob # spikes times
         """
+
+    def load_spikes(self):
+        """
+        Loads all spikes referring to that relation.
+
+        :return: trial ids and spike times in s
+        """
+        spike_times, trial_ids = (Runs.SpikeTimes() & self).fetch['times', 'trial_id']
+        spike_times = [s / 1000 for s in spike_times]  # convert to s
+        return trial_ids, spike_times
+
 
     def _make_tuples(self, key):
         repro = 'SAM'

@@ -11,7 +11,6 @@ from scipy.signal import butter, filtfilt
 import datajoint as dj
 import pycircstat as circ
 import datajoint as dj
-from djaddon import gitlog
 from .analyses import TrialAlign
 from . import mkdir
 from locking.data import peakdet, Runs, Cells, LocalEODPeaksTroughs, CenteredPUnitPhases, UncenteredPUnitPhases, \
@@ -189,7 +188,6 @@ class NoHarmonics(dj.Lookup):
 
 
 @schema
-@gitlog
 class EODFit(dj.Computed):
     definition = """
     ->EFishes
@@ -203,6 +201,9 @@ class EODFit(dj.Computed):
         return EFishes() * NoHarmonics() & (PaperCells() & dict(locking_experiment=1))
 
     def _make_tuples(self, key):
+        if not Runs() * Runs.GlobalEOD() & key:
+            print('Found no entry in Runs() * Runs.GlobalEOD() for key', key)
+            return
         dat = (Runs() * Runs.GlobalEOD() & key).fetch.limit(1).as_dict()[0]  # get some EOD trace
 
         w0 = estimate_fundamental(dat['global_voltage'], dat['samplingrate'], highcut=3000, normalize=.5)
@@ -277,7 +278,6 @@ class EODFit(dj.Computed):
 
 
 @schema
-@gitlog
 class LIFPUnit(dj.Computed):
     definition = """
     # parameters for a LIF P-Unit simulation
@@ -373,7 +373,6 @@ class HarmonicStimulation(dj.Lookup):
     contents = [(0,),(1,)]
 
 @schema
-@gitlog
 class PUnitSimulations(dj.Computed):
     definition = """
     # LIF simulations
@@ -410,6 +409,7 @@ class PUnitSimulations(dj.Computed):
             foreign_eod = EODFit().eod_func(dict(fish_id='2014lepto0021'), fundamental=other_eod)
         else:
             foreign_eod = EODFit().eod_func(dict(fish_id='2014lepto0021'), fundamental=other_eod, harmonics=0)
+
         bl = baseline(t)
         foreign = foreign_eod(t)
         fac = (bl.max() - bl.min()) * 0.2 / (foreign.max() - foreign.min())
@@ -421,7 +421,7 @@ class PUnitSimulations(dj.Computed):
 
         n = int(duration / dt)
         w = np.fft.fftfreq(n, d=dt)
-        w = w[(w >= 0) & (w <= 3000)]
+        w = w[(w >= 0) & (w <= 4000)]
         vs = np.mean([circ.event_series.direct_vector_strength_spectrum(sp, w) for sp in spikes_stim], axis=0)
         ci = second_order_critical_vector_strength(spikes_stim)
 
@@ -599,7 +599,6 @@ class PUnitSimulations(dj.Computed):
 
 
 @schema
-@gitlog
 class RandomTrials(dj.Lookup):
     definition = """
     n_total                 : int # total number of trials
@@ -693,7 +692,6 @@ class RandomTrials(dj.Lookup):
 
 
 @schema
-@gitlog
 class PyramidalSimulationParameters(dj.Lookup):
     definition = """
     pyr_simul_id    : tinyint
@@ -715,7 +713,6 @@ class PyramidalSimulationParameters(dj.Lookup):
 
 
 @schema
-@gitlog
 class PyramidalLIF(dj.Computed):
     definition = """
     ->RandomTrials

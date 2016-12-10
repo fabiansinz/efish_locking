@@ -7,13 +7,13 @@ import pandas as pd
 import pymysql
 import seaborn as sns
 import sympy
-from scipy import optimize
-from scipy import stats
+from scipy import optimize, stats, signal
+
 
 import datajoint as dj
 import pycircstat as circ
 from datajoint import schema
-from djaddon import gitlog
+
 from locking.data import Runs, GlobalEFieldPeaksTroughs, peakdet, Cells, LocalEODPeaksTroughs, Baseline, \
     GlobalEODPeaksTroughs
 from pycircstat import event_series as es
@@ -147,7 +147,7 @@ class PlotableSpectrum:
         # colors = ['deeppink', 'dodgerblue', sns.xkcd_rgb['mustard'], sns.xkcd_rgb['steel grey']]
 
 
-        markers = ['*', '^', 'D', 'h', 'o']
+        markers = ['*', '^', 'D', 's', 'o']
         stim, eod, baseline, beat = sympy.symbols('f_s, f_e, f_b, \Delta')
 
         for fos in ((self * Runs()).proj() & restrictions).fetch.as_dict:
@@ -209,18 +209,19 @@ class PlotableSpectrum:
                         ax.plot(freq, vs, 'k', mfc=self.colors[2], label='baseline firing', marker=markers[2],
                                 linestyle='None')
                     elif cs == 1 and ce == -1 and cb == 0:
-                        ax.plot(freq, vs, 'k', mfc=self.colors[3], label=r'$\Delta f$', marker=markers[3],
+                        ax.plot(freq, vs, 'k', mfc=self.colors[3], label=r'$\Delta f=%.0f$ Hz' % freq, marker=markers[3],
                                 linestyle='None')
                     else:
                         ax.plot(freq, vs, 'k', mfc=self.colors[4], label='combinations', marker=markers[4],
                                 linestyle='None')
                     term = term.replace('1.0 ', ' ')
-                    ax.text(freq, vs + .05, r'$%s=%.1f$Hz' % (term, freq), fontsize=5, rotation=85,
+                    term = term.replace('.0 ', ' ')
+                    ax.text(freq, vs + .05, r'$%s=%.0f$Hz' % (term, freq), fontsize=8, rotation=85,
                             ha='left',
                             va='bottom')
             handles, labels = ax.get_legend_handles_labels()
             by_label = OrderedDict(zip(labels, handles))
-            ax.legend(by_label.values(), by_label.keys())
+            ax.legend(by_label.values(), by_label.keys(), bbox_to_anchor=(1.05,1.1))
 
 
 @schema
@@ -248,7 +249,6 @@ class SpectraParameters(dj.Lookup):
 
 
 @schema
-@gitlog
 class TrialAlign(dj.Computed):
     definition = """
     # computes a time point where the EOD and the stimulus coincide
@@ -311,7 +311,6 @@ class TrialAlign(dj.Computed):
 
 
 @schema
-@gitlog
 class FirstOrderSpikeSpectra(dj.Computed, PlotableSpectrum):
     definition = """
     # table that holds 1st order vector strength spectra
@@ -363,7 +362,6 @@ class FirstOrderSpikeSpectra(dj.Computed, PlotableSpectrum):
 
 
 @schema
-@gitlog
 class StimulusSpikeJitter(dj.Computed):
     definition = """
     # circular variance and std of spike times within an EOD period during stimulation
@@ -394,7 +392,6 @@ class StimulusSpikeJitter(dj.Computed):
 
 
 @schema
-@gitlog
 class BaselineSpikeJitter(dj.Computed):
     definition = """
     # circular variance and mean of spike times within an EOD period
@@ -430,7 +427,6 @@ class BaselineSpikeJitter(dj.Computed):
 
 
 @schema
-@gitlog
 class SecondOrderSpikeSpectra(dj.Computed, PlotableSpectrum):
     definition = """
     # table that holds 2nd order vector strength spectra
@@ -510,7 +506,6 @@ class SecondOrderSpikeSpectra(dj.Computed, PlotableSpectrum):
 
 
 @schema
-@gitlog
 class FirstOrderSignificantPeaks(dj.Computed):
     definition = """
     # hold significant peaks in spektra
@@ -560,7 +555,6 @@ class FirstOrderSignificantPeaks(dj.Computed):
 
 
 @schema
-@gitlog
 class SecondOrderSignificantPeaks(dj.Computed):
     definition = """
     # hold significant peaks in spektra
@@ -620,7 +614,6 @@ class SamplingPointsPerBin(dj.Lookup):
 
 
 @schema
-@gitlog
 class PhaseLockingHistogram(dj.Computed):
     definition = """
     # phase locking histogram at significant peaks
@@ -709,7 +702,6 @@ class PhaseLockingHistogram(dj.Computed):
 
 
 @schema
-@gitlog
 class EODStimulusPSTSpikes(dj.Computed):
     definition = """
     # PSTH of Stimulus and EOD at the difference frequency of both
@@ -784,6 +776,7 @@ class EODStimulusPSTSpikes(dj.Computed):
             db = 2 * whs / 400
             bins = np.arange(-whs, whs + db, db)
             g = np.exp(-np.linspace(-whs, whs, len(bins) - 1) ** 2 / 2 / (whs / 25) ** 2)
+            print('Low pass kernel sigma=', whs/25)
             bin_centers = 0.5 * (bins[1:] + bins[:-1])
             y = [0]
             yticks = []
@@ -808,11 +801,11 @@ class EODStimulusPSTSpikes(dj.Computed):
             ax.set_xticks([-whs, -whs / 2, 0, whs / 2, whs])
 
             ax.set_xticklabels([-10, -5, 0, 5, 10])
-            ax.set_ylabel(r'$\Delta f$')
+            ax.set_ylabel(r'$\Delta f$ [Hz]')
             ax.tick_params(axis='y', length=0, width=0, which='major')
 
             ax.set_yticks(0.5 * (y[1:] + y[:-1]))
-            ax.set_yticklabels(yticks)
+            ax.set_yticklabels(['%.0f' % yt for yt in yticks])
             ax.set_ylim(y[[0, -1]])
 
 
@@ -826,7 +819,6 @@ class SignificanceLevel(dj.Lookup):
 
 
 @schema
-@gitlog
 class Decoding(dj.Computed):
     definition = """
     # locking by decoding time
@@ -883,3 +875,53 @@ class Decoding(dj.Computed):
             if np.isinf(c):
                 c = np.NaN
             beat.insert1(dict(key, vs_beat=v, crit_beat=c))
+
+
+#
+# @schema
+# @gitlog
+# class DfClassification(dj.Computed):
+#     definition = """
+#     -> Runs
+#     other_run_id        : int   # id of the run with -df, cell_id and fish_id are the same
+#     ---
+#     eod_difference      : float # difference in the EODs between the two different runs
+#     """
+#
+#     @property
+#     def key_source(self):
+#         return ((Runs() * Runs().proj(r2='run_id', df2='delta_f', e2='eod', c2='contrast') \
+#                 & """ABS(contrast - c2) < 1E-6 and ABS(delta_f+df2) < 1E-6 and delta_f > 0
+#                         and am=0 and n_harmonics = 0 and contrast = 20 and delta_f >= 20""" \
+#                 & (Cells() & 'cell_type = "p-unit"')).proj(other_run_id='r2', eod_difference='e2 - eod') \
+#                 & 'abs(eod_difference) < 1').aggregate(Runs.SpikeTimes(), n='COUNT(trial_id)')
+#
+#     @staticmethod
+#     def compute_spectra(spikes, f_max=4000, df=0.1, downsample_to=5):
+#         h = signal.hamming(2*np.floor(downsample_to/0.1)+1)
+#         w = np.arange(-f_max, f_max+df, df)
+#         spectra = [[vector_strength_at(f, trial) for f in w] for trial in spikes]
+#         idx = np.where(w >= 0)[0]
+#         step = int(downsample_to / 0.1)
+#         spectra = np.vstack([np.convolve(s, h, mode='same')[idx[::step]] for s in spectra])
+#         return w[idx[::step]], spectra
+#
+#     def _make_tuples(self, key):
+#         np.random.seed(42)
+#         other_key = dict(key)
+#         other_key['run_id'] = other_key.pop('other_run_id')
+#         _, spikes = (Runs() & key).load_spikes()
+#         _, other_spikes = (Runs() & other_key).load_spikes()
+#         if len(spikes) < 30 or len(other_spikes) < 30:
+#
+#             print('Not enough trials', len(spikes)  , len(other_spikes))
+#             return
+#         w, spectra = DfClassification.compute_spectra(spikes, df=.1, downsample_to=5)
+#         _, other_spectra = DfClassification.compute_spectra(other_spikes, df=.1, downsample_to=5)
+#         #----------------------------------
+#         # TODO: Remove this later
+#         from IPython import embed
+#         embed()
+#         exit()
+#         #----------------------------------
+#
