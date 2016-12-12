@@ -4,7 +4,7 @@
     "connection.init_function": null,
     "safemode": true,
     "display.width": 20,
-    "database.host": "dragon.ad.bcm.edu",
+    "database.host": "10.21.17.127",
     "database.user": "efish",
     "database.password": "apteronotus",
     "database.port": 3306
