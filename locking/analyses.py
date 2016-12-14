@@ -148,7 +148,7 @@ class PlotableSpectrum:
 
 
         markers = ['*', '^', 'D', 's', 'o']
-        stim, eod, baseline, beat = sympy.symbols('f_s, f_e, f_b, \Delta')
+        stim, eod, baseline, beat = sympy.symbols('f_s, EODf, f_b, \Delta')
 
         for fos in ((self * Runs()).proj() & restrictions).fetch.as_dict:
             if isinstance(self, FirstOrderSpikeSpectra):
@@ -182,12 +182,20 @@ class PlotableSpectrum:
             df = pd.DataFrame(peaks.fetch())
             df['on'] = np.abs(df.ix[:, :3]).sum(axis=1)
             df = df[df.frequency > 0]
-
             for freq, freq_group in df.groupby('frequency'):  # get all combinations that have the same frequency
 
                 freq_group = freq_group[
                     freq_group.on == freq_group.on.min()]  # take the ones that have the lowest factors
 
+                def label_order(x):
+                    if 'EODf' in x[0]:
+                        return 0
+                    elif 'stimulus' in x[0]:
+                        return 1
+                    elif 'Delta' in x[0]:
+                        return 2
+                    else:
+                        return 3
                 for i, (cs, ce, cb, freq, vs) in freq_group[
                     ['stimulus_coeff', 'eod_coeff', 'baseline_coeff', 'frequency', 'vector_strength']].iterrows():
                     terms = []
@@ -204,7 +212,7 @@ class PlotableSpectrum:
                         ax.plot(freq, vs, 'k', mfc=self.colors[0], label='stimulus', marker=markers[0],
                                 linestyle='None')
                     elif cs == 0 and ce != 0 and cb == 0:
-                        ax.plot(freq, vs, 'k', mfc=self.colors[1], label='EOD', marker=markers[1], linestyle='None')
+                        ax.plot(freq, vs, 'k', mfc=self.colors[1], label='EODf', marker=markers[1], linestyle='None')
                     elif cs == 0 and ce == 0 and cb != 0:
                         ax.plot(freq, vs, 'k', mfc=self.colors[2], label='baseline firing', marker=markers[2],
                                 linestyle='None')
@@ -216,11 +224,12 @@ class PlotableSpectrum:
                                 linestyle='None')
                     term = term.replace('1.0 ', ' ')
                     term = term.replace('.0 ', ' ')
-                    ax.text(freq, vs + .05, r'$%s=%.0f$Hz' % (term, freq), fontsize=8, rotation=85,
+                    term = term.replace('EODf','\\mathdefault{EODf}')
+                    ax.text(freq-20, vs + 0.05, r'$%s=%.0f$Hz' % (term, freq), fontsize=8, rotation=85,
                             ha='left',
                             va='bottom')
             handles, labels = ax.get_legend_handles_labels()
-            by_label = OrderedDict(zip(labels, handles))
+            by_label = OrderedDict(sorted(zip(labels, handles), key=label_order))
             ax.legend(by_label.values(), by_label.keys(), bbox_to_anchor=(1.05,1.1))
 
 

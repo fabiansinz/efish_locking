@@ -888,7 +888,8 @@ class Baseline(dj.Imported):
 
         period = 1 / eod
         t = (spikes % period)
-        print('Vector strength', circ.vector_strength(t/period * 2 * np.pi))
+        nu = circ.vector_strength(t/period * 2 * np.pi)
+        print('Vector strength', nu, 'p-value', np.exp(-nu**2*len(t)))
         ax.hist(t, bins=50, color='silver', lw=0, normed=True)
         ax.set_xlim((0, period))
         ax.set_xlabel('EOD cycle', labelpad=-5)

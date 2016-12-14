@@ -533,15 +533,15 @@ class PUnitSimulations(dj.Computed):
         lp = 1. / np.sqrt(w2[idx] ** 2 * tau ** 2 + 1)
         ax.plot(w[idx], lp / lp.max(), '--', color='gray', label='low pass filter', lw=1, zorder=-10)
 
-        ax.text(eod, 1.1, 'EOD=%.1fHz' % eod, rotation=30, horizontalalignment='left',
+        ax.text(eod, 1.1, 'EODf=%.0fHz' % eod, rotation=30, horizontalalignment='left',
                 verticalalignment='bottom', fontsize=6)
-        ax.text(eod * 2, 0.7, '2 EOD=%.1fHz' % (2 * eod), rotation=30, horizontalalignment='left',
+        ax.text(eod * 2, 0.4, '2 EODf=%.0fHz' % (2 * eod), rotation=30, horizontalalignment='left',
                 verticalalignment='bottom', fontsize=6)
-        ax.text(eod2, 0.8, 'stimulus=%.1fHz' % eod2, rotation=30, horizontalalignment='left',
+        ax.text(eod2, 0.8, 'stimulus=%.0fHz' % eod2, rotation=30, horizontalalignment='left',
                 verticalalignment='bottom', fontsize=6)
         ax.set_ylim((0, 2))
         ax.set_yticks([])
-        ax.set_ylabel('spectrum of\nstimulus s(t)')
+        ax.set_ylabel('amplitude spectrum of\nstimulus s(t)')
         ax.legend(loc='upper right')
 
         ax.set_xlim((0, f_max))
@@ -559,12 +559,12 @@ class PUnitSimulations(dj.Computed):
         M /= M[idx].max()
         ax.fill_between(w[idx], 0 * w[idx], M[idx], color='dodgerblue')
         ax.set_ylim((0, 1.5))
-        ax.text(eod2 - eod, 0.5, r'$\Delta f$=%.1fHz' % (eod2 - eod), rotation=30, horizontalalignment='left',
+        ax.text(eod2 - eod, 0.5, r'$\Delta f$=%.0fHz' % (eod2 - eod), rotation=30, horizontalalignment='left',
                 verticalalignment='bottom', fontsize=6)
-        ax.text(eod + eod2, 0.3, r'2 EOD + $\Delta f$=%.1fHz' % (eod + eod2), rotation=30, horizontalalignment='left',
+        ax.text(eod + eod2, 0.1, r'2 EODf + $\Delta f$=%.0fHz' % (eod + eod2), rotation=30, horizontalalignment='left',
                 verticalalignment='bottom', fontsize=6)
         ax.set_yticks([])
-        ax.set_ylabel('spectrum of\nLIF input z(t)')
+        ax.set_ylabel('amplitude spectrum of\nLIF input z(t)')
 
     def plot_spike_spectrum(self, key, ax, f_max=2000):
         df = (Runs() & key).fetch1['delta_f']
@@ -582,7 +582,7 @@ class PUnitSimulations(dj.Computed):
         ax.fill_between(w[idx], 0 * w[idx], vs[idx], color='dodgerblue')
         ci = second_order_critical_vector_strength(stimulus_spikes)
         ax.fill_between(w[idx], 0 * w[idx], 0 * w[idx] + ci, color='silver', alpha=.5)
-        ax.text(eod3, 0.25, r'EOD - $\Delta f$=%.1fHz' % eod3, rotation=-30, horizontalalignment='right',
+        ax.text(eod3, 0.25, r'EODf - $\Delta f$=%.0fHz' % eod3, rotation=-30, horizontalalignment='right',
                 verticalalignment='bottom', fontsize=6)
         ax.set_ylabel('vector strength spectrum')
 

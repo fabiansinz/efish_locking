@@ -38,7 +38,7 @@ class Figure02(FormatedFigure):
     @staticmethod
     def format_spectrum(ax):
         ax.set_xlim((0, 1500))
-        ax.set_xticks(np.linspace(0,1500,7))
+        ax.set_xticks(np.linspace(0, 1500, 7))
         ax.legend(bbox_to_anchor=(1.05, 1), bbox_transform=ax.transAxes)
         sns.despine(ax=ax, left=True, trim=True, offset=5)
         ax.set_yticks([])
@@ -97,7 +97,7 @@ if __name__ == "__main__":
 
         colors = PlotableSpectrum.colors
         # for contrast in [5, 10, 20]:
-        for contrast in [ 20]:
+        for contrast in [20]:
             print("contrast: %.2f%%" % (contrast,))
 
             target_trials = SecondOrderSpikeSpectra() * runs & cell & \
@@ -115,21 +115,23 @@ if __name__ == "__main__":
                         else:
                             done.append(spec['delta_f'])
                         print(u"\t\t\u0394 f=%.2f" % spec['delta_f'])
-                       
+
                         f, v = spec['frequencies'], spec['vector_strengths']
                         idx = (f >= 0) & (f <= f_max) & ~np.isnan(v)
                         ax['spectrum'].fill_between(f[idx], y[-1] + 0 * f[idx], y[-1] + v[idx], lw=0,
                                                     color='darkslategray')
                         if i == 0:
-                            ax['spectrum'].plot([1900,1900],[.4,.65], '-',color='darkslategray', lw=2, solid_capstyle='butt')
-                            ax['spectrum'].text(1920,0.45, '0.25', fontsize=6)
+                            ax['spectrum'].plot([1900, 1900], [.4, .65], '-', color='darkslategray', lw=2,
+                                                solid_capstyle='butt')
+                            ax['spectrum'].text(1920, 0.45, '0.25', fontsize=6)
                         y.append(y[-1] + .8)
                         stim_freq.append(spec['eod'] + spec['delta_f'])
                         deltaf_freq.append(spec['delta_f'])
                         eod_freq.append(spec['eod'])
 
-                    ax['spectrum'].plot(eod_freq, y[:-1], '--', dashes=(3,7), zorder=-1, lw=2, color=colors[1], label='EOD')
-                    ax['spectrum'].plot(stim_freq, y[:-1], '-', zorder=-1, lw=2, color=colors[0],
+                    ax['spectrum'].plot(eod_freq, y[:-1], '--', dashes=(3, 7), zorder=-1, lw=2, color=colors[1],
+                                        label='EODf')
+                    ax['spectrum'].plot(stim_freq, y[:-1], '--', dashes=(3, 7), zorder=-1, lw=2, color=colors[0],
                                         label='stimulus')
                     ax['spectrum'].plot(np.abs(deltaf_freq), y[:-1], '-', zorder=-1, lw=2, color=colors[3],
                                         label=r'$|\Delta f|$')
@@ -142,7 +144,7 @@ if __name__ == "__main__":
                     # --- plot time cartoon_psth baseline
                     eod = target_trials.fetch['eod'].mean()
                     stim_period = 1 / (eod - delta_f)
-                    print('Beat has period', eod/delta_f, 'EOD cycles')
+                    print('Beat has period', eod / delta_f, 'EOD cycles')
                     var = (1 / 8 / eod) ** 2
                     t = np.linspace(-N / eod, N / eod, 10000)
                     base = lambda t: np.cos(2 * np.pi * eod * t) + 1
