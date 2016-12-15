@@ -28,10 +28,13 @@ class Figure02(FormatedFigure):
                 'violin': self.fig.add_subplot(gs[:3, 3]),
             }
 
-            self.ax['cartoon_psth'] = self.fig.add_subplot(gs[3, :3])
-            self.ax['cartoon_psth_stim'] = self.fig.add_subplot(gs[4, :3])
+            self.ax['cartoon_psth'] = self.fig.add_subplot(gs[3, :2])
+            self.ax['cartoon_psth_stim'] = self.fig.add_subplot(gs[4, :2])
 
             self.ax['spectrum_base'] = self.fig.add_subplot(gs[3, 3])
+            with sns.axes_style('white'):
+                self.ax['polar_base'] = self.fig.add_subplot(gs[3, 2], projection='polar')
+                self.ax['polar_stim'] = self.fig.add_subplot(gs[4, 2], projection='polar')
             self.ax['spectrum_stim'] = self.fig.add_subplot(gs[4, 3])
         self.gs = gs
 
@@ -71,6 +74,24 @@ class Figure02(FormatedFigure):
     def format_spectrum_base(ax):
         # --- spectrum
         sns.despine(ax=ax, left=True, trim=True)
+        ax.set_yticks([])
+
+    @staticmethod
+    def format_polar_base(ax):
+        thetaticks = np.arange(0, 360, 45)
+
+        ax.set_thetagrids(thetaticks, frac=1.3)
+        ax.set_xticklabels([r'$0$', r'$\frac{1}{8f_s}$', r'$\frac{1}{4f_s}$', r'$\frac{3}{8f_s}$', r'$\frac{1}{2f_s}$', \
+                           r'$\frac{5}{8f_s}$', r'$\frac{3}{4f_s}$', r'$\frac{7}{8f_s}$'])
+        ax.set_yticks([])
+
+    @staticmethod
+    def format_polar_stim(ax):
+        thetaticks = np.arange(0, 360, 45)
+
+        ax.set_thetagrids(thetaticks, frac=1.3)
+        ax.set_xticklabels([r'$0$', r'$\frac{1}{8f_s}$', r'$\frac{1}{4f_s}$', r'$\frac{3}{8f_s}$', r'$\frac{1}{2f_s}$', \
+                           r'$\frac{5}{8f_s}$', r'$\frac{3}{4f_s}$', r'$\frac{7}{8f_s}$'])
         ax.set_yticks([])
 
     @staticmethod
@@ -133,7 +154,8 @@ if __name__ == "__main__":
                                         label='EODf')
                     ax['spectrum'].plot(stim_freq, y[:-1], '--', dashes=(3, 7), zorder=-1, lw=2, color=colors[0],
                                         label='stimulus')
-                    ax['spectrum'].plot(np.abs(deltaf_freq), y[:-1], '-', zorder=-1, lw=2, color=colors[3],
+                    ax['spectrum'].plot(np.abs(deltaf_freq), y[:-1], '--', dashes=(3, 7), zorder=-1, lw=2,
+                                        color=colors[3],
                                         label=r'$|\Delta f|$')
 
                     # --- plot locking
@@ -143,23 +165,37 @@ if __name__ == "__main__":
 
                     # --- plot time cartoon_psth baseline
                     eod = target_trials.fetch['eod'].mean()
+                    delta_f = eod / 4
                     stim_period = 1 / (eod - delta_f)
                     print('Beat has period', eod / delta_f, 'EOD cycles')
-                    var = (1 / 8 / eod) ** 2
+                    var = (1 / 12 / eod) ** 2
                     t = np.linspace(-N / eod, N / eod, 10000)
+                    t_rad = np.linspace(-5 * N, 5 * N, 10000) * 2 * np.pi
+                    rad2t = 1 / 2 / np.pi * stim_period
+
                     base = lambda t: np.cos(2 * np.pi * eod * t) + 1
                     beat = lambda t: np.cos(2 * np.pi * delta_f * t) + 1
-                    stim = lambda t: np.cos(2 * np.pi * eod * t) + np.cos(2 * np.pi * (eod - delta_f) * t) + 2
-                    f_base = sum(gauss(t, mu, var) for mu in np.arange(-N / eod, N / eod, 1 / eod))
-                    f_stim = sum(gauss(t, mu, var) * beat(mu) for mu in np.arange(-N / eod, N / eod, 1 / eod))
+                    stim = lambda t: np.cos(2 * np.pi * (eod - delta_f) * t) + 1
+                    stim_eod = lambda t: base(t) + stim(t)
+                    f_base = lambda t: sum(gauss(t, mu, var) for mu in np.arange(-N * 5 / eod, N * 5 / eod, 1 / eod))
+                    f_stim = lambda t: sum(
+                        gauss(t, mu, var) * beat(mu) for mu in np.arange(-N * 5 / eod, N * 5 / eod, 1 / eod))
 
-                    ax['cartoon_psth'].fill_between(t, 0 * t, f_base, color='grey', lw=0)
-                    ax['cartoon_psth'].plot(t, base(t), '-k')
+                    ax['cartoon_psth'].fill_between(t, 0 * t, f_base(t), color='grey', lw=0)
+                    ax['cartoon_psth'].plot(t, base(t), '-', color=colors[1])
                     ax['cartoon_psth'].set_ylim((0, 2.1))
 
-                    ax['cartoon_psth_stim'].fill_between(t, 0 * t, f_stim, color='grey', lw=0)
-                    ax['cartoon_psth_stim'].plot(t, stim(t), '-k')
-                    ax['cartoon_psth_stim'].set_ylim((0, 4.2))
+                    ax['polar_base'].fill_between(t_rad, 0 * t_rad, f_base(t_rad * rad2t), color='grey', lw=0)
+
+                    ax['cartoon_psth_stim'].fill_between(t, 0 * t, f_stim(t), color='grey', lw=0)
+                    ax['cartoon_psth_stim'].plot(t, stim_eod(t), '-', color=colors[0], )
+                    ax['cartoon_psth_stim'].plot(t, stim_eod(t), '--', color=colors[1], dashes=(10,10))
+                    ax['cartoon_psth_stim'].plot(t, stim(t)*.5+4.1, '-', color=colors[0], lw=1)
+                    ax['cartoon_psth_stim'].plot(t, base(t)*.5+4.1, '-', color=colors[1], lw=1)
+                    ax['cartoon_psth_stim'].set_ylim((0, 5.2))
+
+                    ax['polar_stim'].fill_between(t_rad, 0 * t_rad, f_stim(t_rad * rad2t), color='grey', lw=0)
+                    ax['polar_stim'].plot(t_rad, stim(t_rad * rad2t), color=colors[0])
 
                     for k in ['cartoon_psth', 'cartoon_psth_stim']:
                         ax[k].set_xticks(np.arange(-N / eod, (N + 1) / eod, 5 / eod))
@@ -168,13 +204,13 @@ if __name__ == "__main__":
                         ax[k].set_xticklabels(np.arange(-N, N + 1, 5))
                         ax[k].set_xlabel('time [EOD cycles]')
 
-                    F_base = fftshift(fft(f_base))
-                    w_base = fftshift(fftfreq(f_base.size, t[1] - t[0]))
+                    F_base = fftshift(fft(f_base(t)))
+                    w_base = fftshift(fftfreq(f_base(t).size, t[1] - t[0]))
                     idx = abs(w_base) < f_max
                     ax['spectrum_base'].plot(w_base[idx], abs(F_base[idx]), '-k')
 
-                    F_stim = fftshift(fft(f_stim))
-                    w_stim = fftshift(fftfreq(f_stim.size, t[1] - t[0]))
+                    F_stim = fftshift(fft(f_stim(t)))
+                    w_stim = fftshift(fftfreq(f_stim(t).size, t[1] - t[0]))
                     idx = abs(w_stim) < f_max
                     ax['spectrum_stim'].plot(w_stim[idx], abs(F_stim[idx]), '-k')
 
