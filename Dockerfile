@@ -8,11 +8,7 @@ RUN \
   apt-get install -y -q \
     build-essential && \
   apt-get update && \
-  apt-get install  --fix-missing -y -q \
-    autoconf \
-    automake \
-    libtool \
-    git
+  apt-get install git
 
 
 # install HDF5 reader and rabbit-mq client lib
