@@ -1,0 +1,14 @@
+version: '2'
+
+services:
+  locking:
+    build: .
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix
+      - $HOME/data/carolin:/data/
+      - .:/efish/
+      - ./figures_docker:/efish/figures
+    environment:
+      - DISPLAY=$DISPLAY
+    entrypoint: /bin/bash
+    env_file: .env
