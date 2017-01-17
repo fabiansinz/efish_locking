@@ -11,7 +11,8 @@ RUN \
   apt-get install  --fix-missing -y -q \
     autoconf \
     automake \
-    libtool
+    libtool \
+    git
 
 
 # install HDF5 reader and rabbit-mq client lib
@@ -22,7 +23,8 @@ WORKDIR /efish
 
 RUN \
   pip install git+https://github.com/circstat/pycircstat.git && \
-  pip install git+https://github.com/fabiansinz/pyrelacs.git
+  pip install git+https://github.com/fabiansinz/pyrelacs.git && \
+  pip install matplotlib_venn
 
 
 # Install pipeline
