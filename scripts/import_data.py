@@ -15,12 +15,11 @@ data.PUnitPhases().populate(reserve_jobs=True)
 sanity.SpikeCheck().populate(reserve_jobs=True)
 
 print('These Runs have no spikes at all and should be deleted')
-print(data.Runs()*sanity.SpikeCheck() & 'all_zeros > 0')
+print(data.Runs() * sanity.SpikeCheck() & 'all_zeros > 0')
+(data.Runs() * sanity.SpikeCheck() & 'all_zeros > 0').delete()
 
-for k in (sanity.SpikeCheck.SpikeCount()*data.Runs.SpikeTimes() & 'is_empty=1').fetch.keys():
+for k in (sanity.SpikeCheck.SpikeCount() * data.Runs.SpikeTimes() & 'is_empty=1').fetch.keys():
     (data.Runs().SpikeTimes() & k)._update('times', np.array([]))
 
-
-
-# relable misslabeled cell
-(data.Cells() & dict(cell_id='2014-05-21-ab'))._update('cell_type','p-unit')
+# relabel misslabeled cell
+(data.Cells() & dict(cell_id='2014-05-21-ab'))._update('cell_type', 'p-unit')
