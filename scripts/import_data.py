@@ -16,6 +16,13 @@ sanity.SpikeCheck().populate(reserve_jobs=True)
 
 print('These Runs have no spikes at all and should be deleted')
 print(data.Runs() * sanity.SpikeCheck() & 'all_zeros > 0')
+#----------------------------------
+# TODO: Remove this later
+from IPython import embed
+embed()
+exit()
+#----------------------------------
+
 for k in (data.Runs() * sanity.SpikeCheck() & 'all_zeros > 0').fetch.as_dict:
     (data.Runs() & k).delete()
 
