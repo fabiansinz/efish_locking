@@ -19,4 +19,11 @@
  - If you only want to use a populated database, read on. If you want to populate the tables, then you'll need a directory
     `data/carolin` in you home with the recordings. If the files are at a different location, change the location in
     `docker-compose.yml`.
- - Start
+ - Start the docker container by `sudo docker-compose run locking`. That will start a shell in the docker container
+ - To import the data use: `python3 scripts/populate_data.py`
+ - To run analyses use: `python3 scripts/populate_analyses.py`
+ - To run modells use: `python3 scripts/populate_modelling.py`
+ - After that you can reproduce the figures with the respective figure scripts in the `scripts` directory.
+   The current `docker-compose.yml` maps the local directory `figures_docker` to the directory where the
+   figures are stored in the container. This means you either have to create that one locally or you need to
+   change the `docker-compose.yml` to point to a different directory.
