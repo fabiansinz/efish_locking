@@ -8,7 +8,7 @@ import seaborn as sns
 
 BASEDIR = '/data/'
 schema = dj.schema('efish_data', locals())
-from pyrelacs.DataClasses import load
+from pyrelacs.DataClasses import load, TraceFile
 import numpy as np
 from pint import UnitRegistry
 import pycircstat as circ
@@ -18,7 +18,9 @@ import seaborn as sns
 import statsmodels.api as sm
 from statsmodels.formula.api import ols
 import pickle
+
 ureg = UnitRegistry()
+
 
 def peakdet(v, delta=None):
     """
@@ -687,13 +689,13 @@ class EFishes(dj.Imported):
                         'weight': float(a['Weight'][:-1]),
                         'size': float(a['Size'][:-2])})
         else:
-            dat = pickle.load(open(BASEDIR + '/punit_info.pickle','rb'))
+            dat = pickle.load(open(BASEDIR + '/punit_info.pickle', 'rb'))
             info = dat[key['cell_id']]
-            raw = pickle.load(open(BASEDIR + '/punit_phases.pickle','rb'))
+            raw = pickle.load(open(BASEDIR + '/punit_phases.pickle', 'rb'))
             assert info['Species'] != 'Apteronotus albifrons', 'Wrong species'
 
             key.update({'fish_id': key['cell_id'][:10] if not 'Identifier' in info else info['Identifier'],
-                        'eod_frequency': 1/np.median(np.diff(raw[key['cell_id']]['eod_times'])),
+                        'eod_frequency': 1 / np.median(np.diff(raw[key['cell_id']]['eod_times'])),
                         'weight': float(info['Weight'][:-1]) if 'Weight' in info else -1,
                         'size': float(info['Size'][:-2])})
         self.insert1(key)
@@ -822,7 +824,7 @@ class ISIHistograms(dj.Imported):
             return
         dt = eod_cycles[1] - eod_cycles[0]
         idx = eod_cycles <= 15
-        ax.bar(eod_cycles[idx], p[idx], width=dt, color=sns.xkcd_rgb['charcoal grey'], lw=0)
+        ax.bar(eod_cycles[idx], p[idx], width=dt, color=sns.xkcd_rgb['grey'], lw=0)
         ax.set_xlabel('EOD cycles')
 
 
@@ -888,8 +890,8 @@ class Baseline(dj.Imported):
 
         period = 1 / eod
         t = (spikes % period)
-        nu = circ.vector_strength(t/period * 2 * np.pi)
-        print('Vector strength', nu, 'p-value', np.exp(-nu**2*len(t)))
+        nu = circ.vector_strength(t / period * 2 * np.pi)
+        print('Vector strength', nu, 'p-value', np.exp(-nu ** 2 * len(t)))
         ax.hist(t, bins=50, color='silver', lw=0, normed=True)
         ax.set_xlim((0, period))
         ax.set_xlabel('EOD cycle', labelpad=-5)
@@ -1073,7 +1075,6 @@ class Runs(dj.Imported):
         spike_times = [s / 1000 for s in spike_times]  # convert to s
         return trial_ids, spike_times
 
-
     def _make_tuples(self, key):
         repro = 'SAM'
         basedir = BASEDIR + key['cell_id']
@@ -1187,6 +1188,59 @@ class Runs(dj.Imported):
 
 
 @schema
+class BaseRate(dj.Imported):
+    definition = """
+        # table holding baseline rate with EOD
+        ->Cells
+        ---
+        eod                     : float # eod rate at trial in Hz
+        eod_period              : float # eod period in ms
+        firing_rate             : float # firing rate of the cell
+        time                    : longblob # sampling bins in ms
+        eod_rate                : longblob # instantaneous rate
+        eod_ampl                : longblob # corresponding EOD amplitude
+        min_idx                 : longblob # index into minima of eod amplitude
+        max_idx                 : longblob # index into maxima of eod amplitude
+        """
+
+    def _make_tuples(self, key):
+        print('Populating', key)
+        basedir = BASEDIR + key['cell_id']
+        filename = basedir + '/baserate1.dat'
+        if os.path.isfile(filename):
+            rate = TraceFile(filename)
+        else:
+            print('No such file', filename, 'skipping. ')
+            return
+        info, _, data = [e[0] for e in rate.selectall()]
+
+        key['eod'] = float(info['EOD rate'][:-2])
+        key['eod_period'] = float(info['EOD period'][:-2])
+        key['firing_rate'] = float(info['firing frequency1'][:-2])
+        key['time'], key['eod_rate'], key['eod_ampl'] = data.T
+        _, key['max_idx'], _, key['min_idx'] = peakdet(data[:, 2])
+        self.insert1(key)
+
+    def plot(self, ax, ax2):
+        t, rate, ampl, mi, ma = self.fetch1['time', 'eod_rate', 'eod_ampl', 'min_idx', 'max_idx']
+        n = len(t)
+        if len(mi) < 2:
+            if mi[0] < n // 2:
+                mi = np.hstack((mi, [n]))
+            else:
+                mi = np.hstack(([0], mi + 1))
+        idx = slice(*mi)
+        dt = t[1] - t[0]
+        ax.bar(t[idx], rate[idx], color='grey', lw=0, width=dt, align='center')
+        ax2.plot(t[idx], ampl[idx], color='black')
+        ax.set_ylabel('firing rate [Hz]')
+        ax2.set_ylabel('EOD amplitude [mV]')
+        ax.axis('tight')
+        ax2.axis('tight')
+        ax.set_xlabel('time [ms]')
+
+
+@schema
 class GlobalEFieldPeaksTroughs(dj.Computed):
     definition = """
     # table for peaks and troughs in the global efield
@@ -1223,7 +1277,7 @@ class LocalEODPeaksTroughs(dj.Computed):
         dat = (Runs.LocalEOD() & key).fetch1()
 
         _, key['peaks'], _, key['troughs'] = peakdet(dat['local_efield'])
-        self.insert1(key)\
+        self.insert1(key)
 
 @schema
 class GlobalEODPeaksTroughs(dj.Computed):
@@ -1264,11 +1318,9 @@ class PUnitPhases(dj.Imported):
     def _make_tuples(self, key):
         if not hasattr(PUnitPhases, 'DATA'):
             print('Loading raw data')
-            PUnitPhases.DATA = pickle.load(open(BASEDIR + '/punit_phases.pickle','rb'))
+            PUnitPhases.DATA = pickle.load(open(BASEDIR + '/punit_phases.pickle', 'rb'))
         key.update(self.DATA[key['cell_id']])
         self.insert1(key)
-
-
 
     def plot(self):
         # plot mean phase of spikes to show that they are fish dependent
@@ -1307,9 +1359,10 @@ class CenteredPUnitPhases(dj.Lookup):
                 return x
 
             df = df.groupby('fish_id').apply(center)
-            df['jitter'] =  [circ.std(ph) for ph in df.phases]
-            self.insert([e.to_dict() for _, e in df.ix[:, ('fish_id', 'cell_id', 'phase','jitter')].iterrows()],
+            df['jitter'] = [circ.std(ph) for ph in df.phases]
+            self.insert([e.to_dict() for _, e in df.ix[:, ('fish_id', 'cell_id', 'phase', 'jitter')].iterrows()],
                         skip_duplicates=True)
+
 
 @schema
 class UncenteredPUnitPhases(dj.Lookup):
@@ -1326,6 +1379,6 @@ class UncenteredPUnitPhases(dj.Lookup):
         if len(PUnitPhases()) != len(self):
             df = pd.DataFrame(PUnitPhases().fetch())
             df['phase'] = [circ.mean(e) for e in df.phases]
-            df['jitter'] =  [circ.std(ph) for ph in df.phases]
-            self.insert([e.to_dict() for _, e in df.ix[:, ('fish_id', 'cell_id', 'phase','jitter')].iterrows()],
+            df['jitter'] = [circ.std(ph) for ph in df.phases]
+            self.insert([e.to_dict() for _, e in df.ix[:, ('fish_id', 'cell_id', 'phase', 'jitter')].iterrows()],
                         skip_duplicates=True)

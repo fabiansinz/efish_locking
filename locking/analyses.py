@@ -9,8 +9,9 @@ import seaborn as sns
 import sympy
 from scipy import optimize, stats, signal
 
-
 import datajoint as dj
+from scipy.interpolate import interp1d, InterpolatedUnivariateSpline
+
 import pycircstat as circ
 from datajoint import schema
 
@@ -196,6 +197,7 @@ class PlotableSpectrum:
                         return 2
                     else:
                         return 3
+
                 for i, (cs, ce, cb, freq, vs) in freq_group[
                     ['stimulus_coeff', 'eod_coeff', 'baseline_coeff', 'frequency', 'vector_strength']].iterrows():
                     terms = []
@@ -217,20 +219,21 @@ class PlotableSpectrum:
                         ax.plot(freq, vs, 'k', mfc=self.colors[2], label='baseline firing', marker=markers[2],
                                 linestyle='None')
                     elif cs == 1 and ce == -1 and cb == 0:
-                        ax.plot(freq, vs, 'k', mfc=self.colors[3], label=r'$\Delta f=%.0f$ Hz' % freq, marker=markers[3],
+                        ax.plot(freq, vs, 'k', mfc=self.colors[3], label=r'$\Delta f=%.0f$ Hz' % freq,
+                                marker=markers[3],
                                 linestyle='None')
                     else:
                         ax.plot(freq, vs, 'k', mfc=self.colors[4], label='combinations', marker=markers[4],
                                 linestyle='None')
                     term = term.replace('1.0 ', ' ')
                     term = term.replace('.0 ', ' ')
-                    term = term.replace('EODf','\\mathdefault{EODf}')
-                    ax.text(freq-20, vs + 0.05, r'$%s=%.0f$Hz' % (term, freq), fontsize=8, rotation=85,
+                    term = term.replace('EODf', '\\mathdefault{EODf}')
+                    ax.text(freq - 20, vs + 0.05, r'$%s=%.0f$Hz' % (term, freq), fontsize=8, rotation=85,
                             ha='left',
                             va='bottom')
             handles, labels = ax.get_legend_handles_labels()
             by_label = OrderedDict(sorted(zip(labels, handles), key=label_order))
-            ax.legend(by_label.values(), by_label.keys(), bbox_to_anchor=(1.05,1.1))
+            ax.legend(by_label.values(), by_label.keys(), bbox_to_anchor=(1.05, 1.1))
 
 
 @schema
@@ -358,7 +361,7 @@ class FirstOrderSpikeSpectra(dj.Computed, PlotableSpectrum):
         return f, v, threshold
 
     def _make_tuples(self, key):
-        print('Processing', key['cell_id'], 'run', key['run_id'],)
+        print('Processing', key['cell_id'], 'run', key['run_id'], )
         samplingrate, duration = (Runs() & key).fetch1['samplingrate', 'duration']
         f_max = (SpectraParameters() & key).fetch1['f_max']
 
@@ -388,7 +391,7 @@ class StimulusSpikeJitter(dj.Computed):
         return Runs() & TrialAlign()
 
     def _make_tuples(self, key):
-        print('Processing', key['cell_id'], 'run', key['run_id'],)
+        print('Processing', key['cell_id'], 'run', key['run_id'], )
         eod = (Runs() & key).fetch1['eod']
 
         aggregated_spikes = np.hstack(TrialAlign().load_trials(key))
@@ -500,7 +503,7 @@ class SecondOrderSpikeSpectra(dj.Computed, PlotableSpectrum):
         return freqs[idx], m_ampl[idx], y
 
     def _make_tuples(self, key):
-        print('Processing', key['cell_id'], 'run', key['run_id'],)
+        print('Processing', key['cell_id'], 'run', key['run_id'], )
         dat = (Runs() & key).fetch(as_dict=True)[0]
         dt = 1 / dat['samplingrate']
         t = np.arange(0, dat['duration'], dt)
@@ -722,9 +725,10 @@ class EODStimulusPSTSpikes(dj.Computed):
     stimulus_frequency       : double
     eod_frequency            : double
     window_half_size         : double # spikes will be extracted around +- this size around in phase points of stimulus and eod
-    vector_strength_eod      : double
-    vector_strength_stimulus : double
-    spikes                   : longblob
+    vector_strength_eod      : double   # vector strength of EOD
+    vector_strength_stimulus : double   # vector strength of stimulus
+    spikes                   : longblob # spikes in that window
+    efield                   : longblob # stimulus + eod
     """
 
     @property
@@ -735,7 +739,8 @@ class EODStimulusPSTSpikes(dj.Computed):
 
     def _make_tuples(self, key):
         # key_sub = dict(key)
-        delta_f, eod, samplingrate = (Runs() & key).fetch1['delta_f', 'eod', 'samplingrate']
+        print('Populating', key, flush=True)
+        delta_f, eod, samplingrate, duration = (Runs() & key).fetch1['delta_f', 'eod', 'samplingrate', 'duration']
         runs_stim = Runs() * FirstOrderSignificantPeaks() & key
         runs_eod = Runs() * FirstOrderSignificantPeaks() & dict(key, stimulus_coeff=0, eod_coeff=1)
 
@@ -745,22 +750,28 @@ class EODStimulusPSTSpikes(dj.Computed):
             eod_period = 1 / runs_eod.fetch1['frequency']
 
             whs = 10 * eod_period
-            times, peaks, epeaks = (Runs.SpikeTimes() * GlobalEODPeaksTroughs() \
-                                    * GlobalEFieldPeaksTroughs().proj(epeaks='peaks') \
-                                    & key).fetch['times', 'peaks', 'epeaks']
+
+
+            times, peaks, epeaks, global_eod = \
+                    (Runs.SpikeTimes() * GlobalEODPeaksTroughs() * Runs.GlobalEOD() \
+                            * GlobalEFieldPeaksTroughs().proj(epeaks='peaks') \
+                            & key).fetch['times', 'peaks', 'epeaks','global_voltage']
 
             p0 = [peaks[i][
                       np.abs(epeaks[i][:, None] - peaks[i][None, :]).min(axis=0) <= tol * samplingrate] / samplingrate
                   for i in range(len(peaks))]
 
-            spikes = []
+            spikes, eod, field = [], [], []
+            t = np.linspace(0, duration, duration * samplingrate, endpoint=False)
+            sampl_times = np.linspace(-whs, whs, 1000)
 
-            for train, in_phase in zip(times, p0):
+            for train, eftrain, in_phase in zip(times, global_eod, p0):
                 train = np.asarray(train) / 1000  # convert to seconds
                 for phase in in_phase:
                     chunk = train[(train >= phase - whs) & (train <= phase + whs)] - phase
                     if len(chunk) > 0:
                         spikes.append(chunk)
+                        field.append(np.interp(sampl_times + phase, t, eftrain))
 
             key['eod_frequency'] = runs_eod.fetch1['frequency']
             key['vector_strength_eod'] = runs_eod.fetch1['vector_strength']
@@ -768,9 +779,11 @@ class EODStimulusPSTSpikes(dj.Computed):
             key['vector_strength_stimulus'] = runs_stim.fetch1['vector_strength']
             key['window_half_size'] = whs
 
-            for cycle_idx, train in enumerate(spikes):
+
+            for cycle_idx, train, ef in zip(itertools.count(), spikes, field):
                 key['spikes'] = train
                 key['cycle_idx'] = cycle_idx
+                key['efield'] = ef
                 self.insert1(key)
 
     def plot(self, ax, restrictions, coincidence=0.0001):
@@ -785,7 +798,7 @@ class EODStimulusPSTSpikes(dj.Computed):
             db = 2 * whs / 400
             bins = np.arange(-whs, whs + db, db)
             g = np.exp(-np.linspace(-whs, whs, len(bins) - 1) ** 2 / 2 / (whs / 25) ** 2)
-            print('Low pass kernel sigma=', whs/25)
+            print('Low pass kernel sigma=', whs / 25)
             bin_centers = 0.5 * (bins[1:] + bins[:-1])
             y = [0]
             yticks = []
@@ -816,6 +829,55 @@ class EODStimulusPSTSpikes(dj.Computed):
             ax.set_yticks(0.5 * (y[1:] + y[:-1]))
             ax.set_yticklabels(['%.0f' % yt for yt in yticks])
             ax.set_ylim(y[[0, -1]])
+
+
+    def plot_single(self, ax, restrictions, coincidence=0.0001):
+        rel = self * CoincidenceTolerance() * Runs().proj('delta_f') & restrictions & dict(tol=coincidence)
+        df = pd.DataFrame(rel.fetch())
+        samplingrate, eod = (Runs() & restrictions).fetch1['samplingrate','eod']
+
+
+        if len(df) > 0:
+            whs = df.window_half_size.mean()
+            db = 1/eod
+            bins = np.arange(-whs, whs + db, db)
+            bin_centers = 0.5 * (bins[1:] + bins[:-1])
+            y = [0]
+            yticks = []
+            i = 0
+
+            h, _ = np.histogram(np.hstack(df.spikes), bins=bins)
+
+            for sp in df.spikes:
+                ax.plot(sp, 0 * sp + i, '.k', mfc='k', ms=2, zorder=-10, rasterized=False)
+                i += 1
+            norm = lambda x: (x - x.min())/(x.max() - x.min())
+
+            y.append(i)
+
+            avg_efield = norm(np.mean(df.efield, axis=0))*(y[-1] - y[-2])
+            t = np.linspace(-whs, whs, len(avg_efield), endpoint=False)
+            high, hidx, low, lidx = peakdet(avg_efield)
+            fh = InterpolatedUnivariateSpline(t[hidx], high, k=3)
+            fl = InterpolatedUnivariateSpline(t[lidx], low, k=3)
+            ax.plot(t, avg_efield, lw=2, color='steelblue', zorder=-15, label='stimulus + EOD')
+            ax.plot(t, fh(t), lw=2, color='deeppink', zorder=-15, label='AM')
+            ax.plot(t, fl(t), lw=2, color='deeppink', zorder=-15)
+
+            h = h.astype(np.float64)
+            h *= (y[-1] - y[-2]) / h.max()
+            ax.bar(bin_centers, h + y[-2], align='center', width=db, color='lightgray', zorder=-20,  lw=0, label='PSTH')
+            y = np.asarray(y)
+
+            ax.set_xlim((-whs, whs))
+            ax.set_xticks([-whs, -whs / 2, 0, whs / 2, whs])
+
+            ax.set_xticklabels([-10, -5, 0, 5, 10])
+            ax.tick_params(axis='y', length=0, width=0, which='major')
+
+            ax.set_yticks(0.5 * (y[1:] + y[:-1]))
+            ax.set_yticklabels(['%.0f' % yt for yt in yticks])
+            ax.set_ylim((y[0]-3, y[-1]*1.2))
 
 
 @schema
@@ -862,7 +924,7 @@ class Decoding(dj.Computed):
         return Runs() * SignificanceLevel() & dict(cell_type='p-unit')
 
     def _make_tuples(self, key):
-        print('Processing', key['cell_id'], 'run', key['run_id'],)
+        print('Processing', key['cell_id'], 'run', key['run_id'], )
         dat = (Runs() & key).fetch(as_dict=True)[0]
 
         spike_times, trial_ids = (Runs.SpikeTimes() & key).fetch['times', 'trial_id']
@@ -884,7 +946,6 @@ class Decoding(dj.Computed):
             if np.isinf(c):
                 c = np.NaN
             beat.insert1(dict(key, vs_beat=v, crit_beat=c))
-
 
 #
 # @schema
