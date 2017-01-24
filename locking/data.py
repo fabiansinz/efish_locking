@@ -1231,8 +1231,8 @@ class BaseRate(dj.Imported):
                 mi = np.hstack(([0], mi + 1))
         idx = slice(*mi)
         dt = t[1] - t[0]
-        ax.bar(t[idx], rate[idx], color='grey', lw=0, width=dt, align='center')
-        ax2.plot(t[idx], ampl[idx], color='black')
+        ax.bar(t[idx], rate[idx], color='grey', lw=0, width=dt, align='center', label='spike histogram')
+        ax2.plot(t[idx], ampl[idx], color='black', label='EOD')
         ax.set_ylabel('firing rate [Hz]')
         ax2.set_ylabel('EOD amplitude [mV]')
         ax.axis('tight')

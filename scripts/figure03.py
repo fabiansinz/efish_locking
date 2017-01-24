@@ -81,6 +81,7 @@ fig.savefig('figures/figure03.pdf')
 
 # --- statistical analysis
 glm = smf.glm('vector_strength ~ frequency * jitter + contrast', data=df, family=sm.families.Gamma()).fit()
+
 print(glm.summary())
 print(glm.pvalues)
 

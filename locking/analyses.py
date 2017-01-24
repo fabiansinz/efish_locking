@@ -153,9 +153,9 @@ class PlotableSpectrum:
 
         for fos in ((self * Runs()).proj() & restrictions).fetch.as_dict:
             if isinstance(self, FirstOrderSpikeSpectra):
-                peaks = (FirstOrderSignificantPeaks() & fos & restrictions)
+                peaks = (FirstOrderSignificantPeaks() * restrictions & fos )
             elif isinstance(self, SecondOrderSpikeSpectra):
-                peaks = (SecondOrderSignificantPeaks() & fos & restrictions)
+                peaks = (SecondOrderSignificantPeaks() * restrictions & fos)
             else:
                 raise Exception("Mother class unknown!")
 
@@ -233,7 +233,7 @@ class PlotableSpectrum:
                             va='bottom')
             handles, labels = ax.get_legend_handles_labels()
             by_label = OrderedDict(sorted(zip(labels, handles), key=label_order))
-            ax.legend(by_label.values(), by_label.keys(), bbox_to_anchor=(1.05, 1.1))
+            ax.legend(by_label.values(), by_label.keys(), bbox_to_anchor=(1, 1.3), ncol=len(by_label))
 
 
 @schema
@@ -810,7 +810,7 @@ class EODStimulusPSTSpikes(dj.Computed):
                 h, _ = np.histogram(np.hstack(dgr.spikes), bins=bins)
 
                 for sp in dgr.spikes:
-                    ax.plot(sp, 0 * sp + i, '.k', mfc='k', ms=.5, zorder=-10, rasterized=False)
+                    ax.plot(sp, 0 * sp + i, '.k', mfc='k', ms=1, zorder=-10, rasterized=False)
                     i += 1
                 y.append(i)
                 h = np.convolve(h, g, mode='same')
@@ -921,7 +921,7 @@ class Decoding(dj.Computed):
 
     @property
     def key_source(self):
-        return Runs() * SignificanceLevel() & dict(cell_type='p-unit')
+        return Runs() * SignificanceLevel() * Cells() & dict(cell_type='p-unit')
 
     def _make_tuples(self, key):
         print('Processing', key['cell_id'], 'run', key['run_id'], )
