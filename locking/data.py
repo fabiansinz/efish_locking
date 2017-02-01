@@ -824,7 +824,7 @@ class ISIHistograms(dj.Imported):
             return
         dt = eod_cycles[1] - eod_cycles[0]
         idx = eod_cycles <= 15
-        ax.bar(eod_cycles[idx], p[idx], width=dt, color=sns.xkcd_rgb['grey'], lw=0)
+        ax.bar(eod_cycles[idx], p[idx], width=dt, color=sns.xkcd_rgb['grey'], lw=0, zorder=-10)
         ax.set_xlabel('EOD cycles')
 
 
@@ -899,6 +899,55 @@ class Baseline(dj.Imported):
         ax.set_xticklabels([0, 1])
         # ax.set_ylabel('PSTH')
         ax.set_yticks([])
+
+    def plot_raster(self, ax, cycles=21, repeats=500):
+        sampl_rate, duration, eod = self.fetch1['samplingrate', 'duration', 'eod']
+        peaks, spikes = (self * self.SpikeTimes() * self.LocalEODPeaksTroughs()).fetch1['peaks', 'times']
+        spikes = spikes / 1000  # convert to s
+        pt = peaks / sampl_rate
+        spikes, pt = spikes - pt[0], pt - pt[0]
+        dt = (cycles // 2) / eod
+
+        spikes = [spikes[(spikes >= t - dt) & (spikes < t + dt)] - t for t in pt[cycles // 2::cycles]]
+
+        for y, sp in enumerate(spikes[:min(repeats, len(spikes))]):
+            ax.plot(sp, 0 * sp + y, '.k', mfc='k', ms=2, zorder=-10, rasterized=False)
+
+        ax.set_xticks(np.arange(-(cycles // 2) / eod, (cycles // 2 + 1) / eod, 5 / eod))
+        ax.set_xticklabels(np.arange(-(cycles // 2), cycles // 2 + 1, 5))
+        ax.set_xlim((-(cycles // 2) / eod, (cycles // 2) / eod))
+        ax.set_xlabel('time [EOD cycles]')
+
+        # histogram
+        db = 1 / eod
+        bins = np.arange(-(cycles // 2) / eod, (cycles // 2) / eod + db, db)
+        bin_centers = 0.5 * (bins[1:] + bins[:-1])
+        h, _ = np.histogram(np.hstack(spikes), bins=bins)
+        h = h.astype(np.float64)
+        h *= y / h.max() / 2
+        ax.bar(bin_centers, h, align='center', width=db, color='lightgray', zorder=-20, lw=0, label='spike histogram')
+
+        # EOD
+        if BaseEOD() & self:
+            t, e, pe = (BaseEOD() & self).fetch1['time', 'eod_ampl', 'max_idx']
+            t = t / 1000
+            pe_t = t[pe]
+            t = t - pe_t[cycles // 2]
+            fr, to = pe[0], pe[cycles]
+            t, e = t[fr:to], e[fr:to]
+            e = self.clean_signal(e, eod, t[1] - t[0])
+
+            e = (e - e.min()) / (e.max() - e.min()) * y
+            ax.plot(t, e, lw=2, color='steelblue', zorder=-15, label='EOD')
+
+    @staticmethod
+    def clean_signal(s, eod, dt, tol=3):
+        f = np.fft.fft(s)
+        w = np.fft.fftfreq(len(s), d=dt)
+
+        idx = (w > -2000) & (w < 2000)
+        f[(w % eod > tol) & (w % eod < eod - tol)] = 0
+        return np.fft.ifft(f).real
 
     def _make_tuples(self, key):
         repro = 'BaselineActivity'
@@ -1188,6 +1237,42 @@ class Runs(dj.Imported):
 
 
 @schema
+class BaseEOD(dj.Imported):
+    definition = """
+        # table holding baseline rate with EOD
+        ->Cells
+        ---
+        eod                     : float # eod rate at trial in Hz
+        eod_period              : float # eod period in ms
+        firing_rate             : float # firing rate of the cell
+        time                    : longblob # sampling bins in ms
+        eod_ampl                : longblob # corresponding EOD amplitude
+        min_idx                 : longblob # index into minima of eod amplitude
+        max_idx                 : longblob # index into maxima of eod amplitude
+        """
+
+    def _make_tuples(self, key):
+        print('Populating', key)
+        basedir = BASEDIR + key['cell_id']
+        filename = basedir + '/baseeodtrace.dat'
+        if os.path.isfile(filename):
+            rate = TraceFile(filename)
+        else:
+            print('No such file', filename, 'skipping. ')
+            return
+        info, _, data = [e[0] for e in rate.selectall()]
+
+        key['eod'] = float(info['EOD rate'][:-2])
+        key['eod_period'] = float(info['EOD period'][:-2])
+        key['firing_rate'] = float(info['firing frequency1'][:-2])
+
+        key['time'], key['eod_ampl'] = data.T
+
+        _, key['max_idx'], _, key['min_idx'] = peakdet(data[:, 1])
+        self.insert1(key)
+
+
+@schema
 class BaseRate(dj.Imported):
     definition = """
         # table holding baseline rate with EOD
@@ -1229,11 +1314,13 @@ class BaseRate(dj.Imported):
                 mi = np.hstack((mi, [n]))
             else:
                 mi = np.hstack(([0], mi + 1))
+
         idx = slice(*mi)
         dt = t[1] - t[0]
-        ax.bar(t[idx], rate[idx], color='grey', lw=0, width=dt, align='center', label='spike histogram')
-        ax2.plot(t[idx], ampl[idx], color='black', label='EOD')
-        ax.set_ylabel('firing rate [Hz]')
+        t = t - t[mi[0]]
+        ax2.plot(t[idx], ampl[idx], color='black', label='EOD', zorder=10)
+        ax.bar(t[idx], rate[idx], color='grey', lw=0, width=dt, align='center', label='spike histogram', zorder=-10)
+        # ax.set_ylabel('firing rate [Hz]')
         ax2.set_ylabel('EOD amplitude [mV]')
         ax.axis('tight')
         ax2.axis('tight')
@@ -1278,6 +1365,7 @@ class LocalEODPeaksTroughs(dj.Computed):
 
         _, key['peaks'], _, key['troughs'] = peakdet(dat['local_efield'])
         self.insert1(key)
+
 
 @schema
 class GlobalEODPeaksTroughs(dj.Computed):

@@ -16,7 +16,7 @@ import pycircstat as circ
 from datajoint import schema
 
 from locking.data import Runs, GlobalEFieldPeaksTroughs, peakdet, Cells, LocalEODPeaksTroughs, Baseline, \
-    GlobalEODPeaksTroughs
+    GlobalEODPeaksTroughs, BaseEOD
 from pycircstat import event_series as es
 
 schema = schema('efish_analyses', locals())
@@ -140,22 +140,22 @@ def find_significant_peaks(spikes, w, spectrum, peak_dict, threshold, tol=3.,
 
 
 class PlotableSpectrum:
-    colors = [sns.xkcd_rgb[c] for c in ["windows blue", "amber", "greyish", "faded green", "dusty purple"]]
-
-    def plot(self, ax, restrictions, f_max=2000):
+    # colors = [sns.xkcd_rgb[c] for c in ["windows blue", "amber", "greyish", "faded green", "dusty purple"]]
+    colors =  ["#ff474c", "steelblue", "#e74c3c", "#9a0eea", "gray"]
+    def plot(self, ax, restrictions, f_max=2000, ncol=None):
         sns.set_context('paper')
         # colors = ['#1b9e77', '#d95f02', '#7570b3', '#e7298a']
         # colors = ['deeppink', 'dodgerblue', sns.xkcd_rgb['mustard'], sns.xkcd_rgb['steel grey']]
 
 
-        markers = ['*', '^', 'D', 's', 'o']
+        markers = [(4,0,90), '^', 'D', 's', 'o']
         stim, eod, baseline, beat = sympy.symbols('f_s, EODf, f_b, \Delta')
 
         for fos in ((self * Runs()).proj() & restrictions).fetch.as_dict:
             if isinstance(self, FirstOrderSpikeSpectra):
-                peaks = (FirstOrderSignificantPeaks() * restrictions & fos )
+                peaks = (FirstOrderSignificantPeaks() * restrictions & fos)
             elif isinstance(self, SecondOrderSpikeSpectra):
-                peaks = (SecondOrderSignificantPeaks() * restrictions & fos)
+                peaks = (SecondOrderSignificantPeaks() & restrictions & fos)
             else:
                 raise Exception("Mother class unknown!")
 
@@ -219,7 +219,7 @@ class PlotableSpectrum:
                         ax.plot(freq, vs, 'k', mfc=self.colors[2], label='baseline firing', marker=markers[2],
                                 linestyle='None')
                     elif cs == 1 and ce == -1 and cb == 0:
-                        ax.plot(freq, vs, 'k', mfc=self.colors[3], label=r'$\Delta f=%.0f$ Hz' % freq,
+                        ax.plot(freq, vs, 'k', mfc=self.colors[3], label=r'$\Delta f$=%.0f Hz' % freq,
                                 marker=markers[3],
                                 linestyle='None')
                     else:
@@ -228,12 +228,12 @@ class PlotableSpectrum:
                     term = term.replace('1.0 ', ' ')
                     term = term.replace('.0 ', ' ')
                     term = term.replace('EODf', '\\mathdefault{EODf}')
-                    ax.text(freq - 20, vs + 0.05, r'$%s=%.0f$Hz' % (term, freq), fontsize=8, rotation=85,
+                    ax.text(freq - 20, vs + 0.05, r'$%s$=%.0fHz' % (term, freq), fontsize=8, rotation=85,
                             ha='left',
                             va='bottom')
             handles, labels = ax.get_legend_handles_labels()
             by_label = OrderedDict(sorted(zip(labels, handles), key=label_order))
-            ax.legend(by_label.values(), by_label.keys(), bbox_to_anchor=(1, 1.3), ncol=len(by_label))
+            ax.legend(by_label.values(), by_label.keys(), bbox_to_anchor=(1, 1.3), ncol=len(by_label) if ncol is None else ncol)
 
 
 @schema
@@ -392,15 +392,23 @@ class StimulusSpikeJitter(dj.Computed):
 
     def _make_tuples(self, key):
         print('Processing', key['cell_id'], 'run', key['run_id'], )
-        eod = (Runs() & key).fetch1['eod']
+        if SecondOrderSignificantPeaks() & dict(key, eod_coeff=1, stimulus_coeff=0, baseline_coeff=0, refined=1):
+            eod, vs = (SecondOrderSignificantPeaks() & dict(key, eod_coeff=1, stimulus_coeff=0, baseline_coeff=0,
+                                                        refined=1)).fetch1['frequency','vector_strength']
+        elif SecondOrderSignificantPeaks() & dict(key, eod_coeff=1, stimulus_coeff=0, baseline_coeff=0, refined=0):
+            eod, vs = (SecondOrderSignificantPeaks() & dict(key, eod_coeff=1, stimulus_coeff=0, baseline_coeff=0,
+                                                        refined=0)).fetch1['frequency','vector_strength']
+        else:
+            eod = (Runs() & key).fetch1['eod']
 
         aggregated_spikes = np.hstack(TrialAlign().load_trials(key))
         aggregated_spikes %= 1 / eod
 
         aggregated_spikes *= eod * 2 * np.pi  # normalize to 2*pi
-        key['stim_var'], key['stim_mean'], key['stim_std'] = \
-            circ.var(aggregated_spikes), circ.mean(aggregated_spikes), circ.std(aggregated_spikes)
-        self.insert1(key)
+        if len(aggregated_spikes) > 1:
+            key['stim_var'], key['stim_mean'], key['stim_std'] = \
+                circ.var(aggregated_spikes), circ.mean(aggregated_spikes), circ.std(aggregated_spikes)
+            self.insert1(key)
 
 
 @schema
@@ -751,11 +759,10 @@ class EODStimulusPSTSpikes(dj.Computed):
 
             whs = 10 * eod_period
 
-
             times, peaks, epeaks, global_eod = \
-                    (Runs.SpikeTimes() * GlobalEODPeaksTroughs() * Runs.GlobalEOD() \
-                            * GlobalEFieldPeaksTroughs().proj(epeaks='peaks') \
-                            & key).fetch['times', 'peaks', 'epeaks','global_voltage']
+                (Runs.SpikeTimes() * GlobalEODPeaksTroughs() * Runs.GlobalEOD() \
+                 * GlobalEFieldPeaksTroughs().proj(epeaks='peaks') \
+                 & key).fetch['times', 'peaks', 'epeaks', 'global_voltage']
 
             p0 = [peaks[i][
                       np.abs(epeaks[i][:, None] - peaks[i][None, :]).min(axis=0) <= tol * samplingrate] / samplingrate
@@ -779,22 +786,22 @@ class EODStimulusPSTSpikes(dj.Computed):
             key['vector_strength_stimulus'] = runs_stim.fetch1['vector_strength']
             key['window_half_size'] = whs
 
-
             for cycle_idx, train, ef in zip(itertools.count(), spikes, field):
                 key['spikes'] = train
                 key['cycle_idx'] = cycle_idx
                 key['efield'] = ef
                 self.insert1(key)
 
-    def plot(self, ax, restrictions, coincidence=0.0001):
+    def plot(self, ax, restrictions, coincidence=0.0001, repeats=200):
         rel = self * CoincidenceTolerance() * Runs().proj('delta_f') & restrictions & dict(tol=coincidence)
         df = pd.DataFrame(rel.fetch())
         df['adelta_f'] = np.abs(df.delta_f)
         df['sdelta_f'] = np.sign(df.delta_f)
         df.sort(['adelta_f', 'sdelta_f'], inplace=True)
-
+        eod = (Runs() & restrictions).fetch['eod'].mean()
         if len(df) > 0:
             whs = df.window_half_size.mean()
+            cycles = int(whs * eod) * 2
             db = 2 * whs / 400
             bins = np.arange(-whs, whs + db, db)
             g = np.exp(-np.linspace(-whs, whs, len(bins) - 1) ** 2 / 2 / (whs / 25) ** 2)
@@ -806,7 +813,8 @@ class EODStimulusPSTSpikes(dj.Computed):
             for (adf, sdf), dgr in df.groupby(['adelta_f', 'sdelta_f'], sort=True):
                 delta_f = adf * sdf
                 yticks.append(delta_f)
-
+                n_trials = min(repeats, len(dgr.spikes))
+                dgr = dgr[:n_trials]
                 h, _ = np.histogram(np.hstack(dgr.spikes), bins=bins)
 
                 for sp in dgr.spikes:
@@ -817,29 +825,41 @@ class EODStimulusPSTSpikes(dj.Computed):
                 h *= (y[-1] - y[-2]) / h.max()
                 ax.fill_between(bin_centers, 0 * h + y[-2], h + y[-2], color='silver', zorder=-20)
 
-            y = np.asarray(y)
 
+            if BaseEOD() & restrictions:
+                t, e, pe = (BaseEOD() & restrictions).fetch1['time', 'eod_ampl', 'max_idx']
+                t = t / 1000
+                pe_t = t[pe]
+                t = t - pe_t[cycles // 2]
+                fr, to = pe[0], pe[cycles]
+                t, e = t[fr:to], e[fr:to]
+                e = Baseline.clean_signal(e, eod, t[1] - t[0])
+                dy = 0.15 * (y[-1] - y[0])
+                e = (e - e.min()) / (e.max() - e.min()) * dy
+                ax.plot(t, e + y[-1], lw=2, color='steelblue', zorder=-15, label='EOD')
+                y.append(y[-1] + dy)
+
+            y = np.asarray(y)
             ax.set_xlim((-whs, whs))
             ax.set_xticks([-whs, -whs / 2, 0, whs / 2, whs])
 
             ax.set_xticklabels([-10, -5, 0, 5, 10])
             ax.set_ylabel(r'$\Delta f$ [Hz]')
-            ax.tick_params(axis='y', length=0, width=0, which='major')
+            ax.tick_params(axis='y', length=3, width=1, which='major')
 
+            ax.set_ylim(y[[0, -1]])
+            y = y[:-1]
             ax.set_yticks(0.5 * (y[1:] + y[:-1]))
             ax.set_yticklabels(['%.0f' % yt for yt in yticks])
-            ax.set_ylim(y[[0, -1]])
-
 
     def plot_single(self, ax, restrictions, coincidence=0.0001):
         rel = self * CoincidenceTolerance() * Runs().proj('delta_f') & restrictions & dict(tol=coincidence)
         df = pd.DataFrame(rel.fetch())
-        samplingrate, eod = (Runs() & restrictions).fetch1['samplingrate','eod']
-
+        samplingrate, eod = (Runs() & restrictions).fetch1['samplingrate', 'eod']
 
         if len(df) > 0:
             whs = df.window_half_size.mean()
-            db = 1/eod
+            db = 1 / eod
             bins = np.arange(-whs, whs + db, db)
             bin_centers = 0.5 * (bins[1:] + bins[:-1])
             y = [0]
@@ -851,11 +871,11 @@ class EODStimulusPSTSpikes(dj.Computed):
             for sp in df.spikes:
                 ax.plot(sp, 0 * sp + i, '.k', mfc='k', ms=2, zorder=-10, rasterized=False)
                 i += 1
-            norm = lambda x: (x - x.min())/(x.max() - x.min())
+            norm = lambda x: (x - x.min()) / (x.max() - x.min())
 
             y.append(i)
 
-            avg_efield = norm(np.mean(df.efield, axis=0))*(y[-1] - y[-2])
+            avg_efield = norm(np.mean(df.efield, axis=0)) * (y[-1] - y[-2])
             t = np.linspace(-whs, whs, len(avg_efield), endpoint=False)
             high, hidx, low, lidx = peakdet(avg_efield)
             fh = InterpolatedUnivariateSpline(t[hidx], high, k=3)
@@ -866,7 +886,7 @@ class EODStimulusPSTSpikes(dj.Computed):
 
             h = h.astype(np.float64)
             h *= (y[-1] - y[-2]) / h.max()
-            ax.bar(bin_centers, h + y[-2], align='center', width=db, color='lightgray', zorder=-20,  lw=0, label='PSTH')
+            ax.bar(bin_centers, h + y[-2], align='center', width=db, color='lightgray', zorder=-20, lw=0, label='PSTH')
             y = np.asarray(y)
 
             ax.set_xlim((-whs, whs))
@@ -877,7 +897,7 @@ class EODStimulusPSTSpikes(dj.Computed):
 
             ax.set_yticks(0.5 * (y[1:] + y[:-1]))
             ax.set_yticklabels(['%.0f' % yt for yt in yticks])
-            ax.set_ylim((y[0]-3, y[-1]*1.2))
+            ax.set_ylim((y[0] - 3, y[-1] * 1.2))
 
 
 @schema

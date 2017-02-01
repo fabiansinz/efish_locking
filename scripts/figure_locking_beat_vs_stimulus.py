@@ -6,6 +6,7 @@ import seaborn as sns
 import pandas as pd
 import numpy as np
 from locking import mkdir
+from locking.analyses import PlotableSpectrum
 from scripts.plot_settings import params as plot_params, FormatedFigure
 from scipy import stats
 from scipy import interp
@@ -85,19 +86,19 @@ def plot_locking(df, ax, legend=False):
     idx = (df.vs_beat >= df.crit_beat) & (df.vs_stimulus < df.crit_stimulus)
     n.append(idx.sum())
     df2 = df[idx].groupby(['cell_id', 'delta_f']).mean().reset_index()
-    ax.scatter(df2.vs_stimulus, df2.vs_beat,  color='red',
+    ax.scatter(df2.vs_stimulus, df2.vs_beat,  color=PlotableSpectrum.colors[3],
                           edgecolors='w', lw=.1, s=s, label='beat only')
 
     idx = (df.vs_beat < df.crit_beat) & (df.vs_stimulus >= df.crit_stimulus)
     n.append(idx.sum())
     df2 = df[idx].groupby(['cell_id', 'delta_f']).mean().reset_index()
-    ax.scatter(df2.vs_stimulus, df2.vs_beat, color='blue',
+    ax.scatter(df2.vs_stimulus, df2.vs_beat, color=PlotableSpectrum.colors[0],
                           edgecolors='w', lw=.1, s=s, label='stimulus only')
 
     idx = (df.vs_beat >= df.crit_beat) & (df.vs_stimulus >= df.crit_stimulus)
     n.append(idx.sum())
     df2 = df[idx].groupby(['cell_id', 'delta_f']).mean().reset_index()
-    ax.scatter(df2.vs_stimulus, df2.vs_beat, color='grey',
+    ax.scatter(df2.vs_stimulus, df2.vs_beat, color=sns.xkcd_rgb['teal blue'],
                           edgecolors='w', lw=.1, s=s, label='both')
 
     ax.set_aspect(1.)
@@ -106,9 +107,9 @@ def plot_locking(df, ax, legend=False):
                        width="20%",  # width = 30% of parent_bbox
                        height="20%",  # height : 1 inch
                        loc=4)
-    axins.bar(0,n[0], color='red', align='center')
-    axins.bar(1,n[1], color='blue', align='center')
-    axins.bar(2,n[2], color='grey', align='center')
+    axins.bar(0,n[0], color=PlotableSpectrum.colors[3], align='center')
+    axins.bar(1,n[1], color=PlotableSpectrum.colors[0], align='center')
+    axins.bar(2,n[2], color=sns.xkcd_rgb['teal blue'], align='center')
     axins.axis('off')
     ax.plot(*2 * (np.linspace(0, 1, 2),), '--k', zorder=-10)
     if legend:

@@ -23,6 +23,7 @@ class SimulationFigure:
                 'sim_spike_spectrum': self.ax[2],
                 'real_spike_spectrum': self.ax[3],
             }
+
             # with sns.axes_style('ticks'):
             #     self.ax['sim_isi'] = inset_axes(self.ax['sim_spike_spectrum'], width=.6, height=.6, loc=1 ,
             #                                     bbox_to_anchor=(1.15, 1.1),
@@ -37,7 +38,10 @@ class SimulationFigure:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         fig, ax = self.fig, self.ax
-
+        ax['stimulus_spectrum'].yaxis.labelpad = 17
+        ax['membrane_spectrum'].yaxis.labelpad = 17
+        ax['real_spike_spectrum'].yaxis.labelpad = 2
+        ax['sim_spike_spectrum'].yaxis.labelpad = 2
         ax['real_spike_spectrum'].set_ylim((0, 1.5))
         sns.despine(ax=ax['stimulus_spectrum'], left=True, offset=0)
         ax['stimulus_spectrum'].set_xticklabels([])
@@ -53,7 +57,9 @@ class SimulationFigure:
 
         fig.tight_layout()
         fig.subplots_adjust(right=0.80)
-        ax['real_spike_spectrum'].legend_.set_bbox_to_anchor((1.25, 1.),
+
+        if ax['real_spike_spectrum'].legend_ is not None:
+            ax['real_spike_spectrum'].legend_.set_bbox_to_anchor((1.25, 1.),
                                                              transform=ax['real_spike_spectrum'].transAxes)
         ax['stimulus_spectrum'].legend_.set_bbox_to_anchor((1.2, 1))
         # sns.despine(ax=self.ax['real_isi'], left=True, trim=True)
@@ -95,7 +101,7 @@ for ri, hs in itertools.product([5,13],[0,1]):
     for key in (PUnitSimulations() & restrictions).fetch.keys():
         print(key)
         print('Processing', key)
-        dir = 'figures/figure04/' + key['id']
+        dir = 'figures/figure_simulation/' + key['id']
         mkdir(dir)
         df = (Runs() & key).fetch1['delta_f']
         with SimulationFigure(filename='{dir}/figure04_{cell_id}_{df}_harmonics{harmonic_stimulation}.pdf'.format(dir=dir, df=df, **key)) as (fig, ax):
@@ -104,6 +110,6 @@ for ri, hs in itertools.product([5,13],[0,1]):
             PUnitSimulations().plot_spike_spectrum(key, ax['sim_spike_spectrum'])
 
             restrictions = dict(key, refined=True)
-            SecondOrderSpikeSpectra().plot(ax['real_spike_spectrum'], restrictions, f_max=2000)
+            SecondOrderSpikeSpectra().plot(ax['real_spike_spectrum'], restrictions, f_max=2000, ncol=1)
             # ISIHistograms().plot(ax['real_isi'], restrictions)
             # PUnitSimulations().plot_isi(key, ax['sim_isi'])
