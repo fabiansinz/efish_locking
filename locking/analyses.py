@@ -140,7 +140,6 @@ def find_significant_peaks(spikes, w, spectrum, peak_dict, threshold, tol=3.,
 
 
 class PlotableSpectrum:
-
     def plot(self, ax, restrictions, f_max=2000, ncol=None):
         sns.set_context('paper')
         # colors = ['#1b9e77', '#d95f02', '#7570b3', '#e7298a']
@@ -175,14 +174,13 @@ class PlotableSpectrum:
 
             ax.set_xlabel('frequency [Hz]')
             ax.set_ylabel('vector strength')
-            ax.set_ylim((0, 1.3))
+            ax.set_ylim((0, 1.))
             ax.set_xlim((0, f_max))
             ax.set_yticks([0, .25, .5, .75, 1.0])
 
             df = pd.DataFrame(peaks.fetch())
             df['on'] = np.abs(df.ix[:, :3]).sum(axis=1)
             df = df[df.frequency > 0]
-
 
             for freq, freq_group in df.groupby('frequency'):  # get all combinations that have the same frequency
 
@@ -209,18 +207,25 @@ class PlotableSpectrum:
                             term = term + coeff * (stim - eod) - coeff * beat
                         terms.append(sympy.latex(term.simplify()))
                     term = ' = '.join(terms)
-
+                    fontsize = ax.xaxis.get_ticklabels()[0].get_fontsize()
                     # use different colors and labels depending on the frequency
                     if cs != 0 and ce == 0 and cb == 0:
-                        ax.plot(freq, vs, 'k', mfc=colordict['stimulus'], label='stimulus', marker=markers[0],
+                        ax.plot(freq, vs, 'k', mfc=colordict['stimulus'],
+                                label='$f_s$={:.0f} Hz'.format(freq, ) if cs == 1 else None, marker=markers[0],
                                 linestyle='None')
+
                     elif cs == 0 and ce != 0 and cb == 0:
-                        ax.plot(freq, vs, 'k', mfc=colordict['eod'], label='EODf', marker=markers[1], linestyle='None')
+                        ax.plot(freq, vs, 'k', mfc=colordict['eod'],
+                                label='EODf = {:.0f} Hz'.format(freq) if ce == 1 else None,
+                                marker=markers[1],
+                                linestyle='None')
                     elif cs == 0 and ce == 0 and cb != 0:
-                        ax.plot(freq, vs, 'k', mfc=colordict['baseline'], label='baseline firing', marker=markers[2],
+                        ax.plot(freq, vs, 'k', mfc=colordict['baseline'],
+                                label='baseline firing = {:.0f} Hz'.format(freq) if cb == 1 else None, marker=markers[2],
                                 linestyle='None')
                     elif cs == 1 and ce == -1 and cb == 0:
-                        ax.plot(freq, vs, 'k', mfc=colordict['delta_f'], label=r'$\Delta f$=%.0f Hz' % freq,
+                        ax.plot(freq, vs, 'k', mfc=colordict['delta_f'],
+                                label=r'$\Delta f$=%.0f Hz' % freq,
                                 marker=markers[3],
                                 linestyle='None')
                     else:
@@ -229,9 +234,10 @@ class PlotableSpectrum:
                     term = term.replace('1.0 ', ' ')
                     term = term.replace('.0 ', ' ')
                     term = term.replace('EODf', '\\mathdefault{EODf}')
-                    ax.text(freq - 20, vs + 0.05, r'$%s$=%.0fHz' % (term, freq), fontsize=8, rotation=85,
-                            ha='left',
-                            va='bottom')
+                    term = term.replace('\\Delta', '\\Delta f')
+
+                    ax.text(freq - 20, vs + 0.05, r'${}$'.format(term),
+                            fontsize=fontsize, rotation=85, ha='left', va='bottom')
             handles, labels = ax.get_legend_handles_labels()
 
             by_label = OrderedDict(sorted(zip(labels, handles), key=label_order))
@@ -885,8 +891,8 @@ class EODStimulusPSTSpikes(dj.Computed):
             for offset, sp in zip(itertools.count(start=repeats // 2 + 1), df.spikes):
                 # ax.plot(sp, 0 * sp + offset, '.k', mfc='k', ms=2, zorder=-10, rasterized=False,
                 #         label='spikes' if offset == repeats // 2 + 1 else None)
-                ax.vlines(sp, 0 * sp + offset, 0 * sp + offset + 1,'k',   zorder=-10, rasterized=False,
-                        label='spikes' if offset == repeats // 2 + 1 else None)
+                ax.vlines(sp, 0 * sp + offset, 0 * sp + offset + 1, 'k', zorder=-10, rasterized=False,
+                          label='spikes' if offset == repeats // 2 + 1 else None)
                 offset += 1
             norm = lambda x: (x - x.min()) / (x.max() - x.min())
 
