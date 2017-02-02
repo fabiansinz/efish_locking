@@ -1,5 +1,7 @@
 import os
 import re
+from itertools import count
+
 import datajoint as dj
 import datajoint as dj
 import sys
@@ -900,7 +902,7 @@ class Baseline(dj.Imported):
         # ax.set_ylabel('PSTH')
         ax.set_yticks([])
 
-    def plot_raster(self, ax, cycles=21, repeats=500):
+    def plot_raster(self, ax, cycles=21, repeats=15):
         sampl_rate, duration, eod = self.fetch1['samplingrate', 'duration', 'eod']
         peaks, spikes = (self * self.SpikeTimes() * self.LocalEODPeaksTroughs()).fetch1['peaks', 'times']
         spikes = spikes / 1000  # convert to s
@@ -910,13 +912,6 @@ class Baseline(dj.Imported):
 
         spikes = [spikes[(spikes >= t - dt) & (spikes < t + dt)] - t for t in pt[cycles // 2::cycles]]
 
-        for y, sp in enumerate(spikes[:min(repeats, len(spikes))]):
-            ax.plot(sp, 0 * sp + y, '.k', mfc='k', ms=2, zorder=-10, rasterized=False)
-
-        ax.set_xticks(np.arange(-(cycles // 2) / eod, (cycles // 2 + 1) / eod, 5 / eod))
-        ax.set_xticklabels(np.arange(-(cycles // 2), cycles // 2 + 1, 5))
-        ax.set_xlim((-(cycles // 2) / eod, (cycles // 2) / eod))
-        ax.set_xlabel('time [EOD cycles]')
 
         # histogram
         db = 1 / eod
@@ -924,8 +919,18 @@ class Baseline(dj.Imported):
         bin_centers = 0.5 * (bins[1:] + bins[:-1])
         h, _ = np.histogram(np.hstack(spikes), bins=bins)
         h = h.astype(np.float64)
-        h *= y / h.max() / 2
+        h *= repeats / h.max() / 2
         ax.bar(bin_centers, h, align='center', width=db, color='lightgray', zorder=-20, lw=0, label='spike histogram')
+
+
+        for y, sp in zip(count(start=repeats//2+1), spikes[:min(repeats, len(spikes))]):
+            ax.vlines(sp, 0 * sp + y, 0 * sp + y+1,'k', rasterized=False)
+            # ax.plot(sp, 0 * sp + y, '.k', mfc='k', ms=2, zorder=-10, rasterized=False)
+        y += 1
+        ax.set_xticks(np.arange(-(cycles // 2) / eod, (cycles // 2 + 1) / eod, 5 / eod))
+        ax.set_xticklabels(np.arange(-(cycles // 2), cycles // 2 + 1, 5))
+        ax.set_xlim((-(cycles // 2) / eod, (cycles // 2) / eod))
+        ax.set_xlabel('time [EOD cycles]')
 
         # EOD
         if BaseEOD() & self:
@@ -937,8 +942,8 @@ class Baseline(dj.Imported):
             t, e = t[fr:to], e[fr:to]
             e = self.clean_signal(e, eod, t[1] - t[0])
 
-            e = (e - e.min()) / (e.max() - e.min()) * y
-            ax.plot(t, e, lw=2, color='steelblue', zorder=-15, label='EOD')
+            e = (e - e.min()) / (e.max() - e.min()) * repeats/2
+            ax.plot(t, e + y, lw=2, color='steelblue', zorder=-15, label='EOD')
 
     @staticmethod
     def clean_signal(s, eod, dt, tol=3):
