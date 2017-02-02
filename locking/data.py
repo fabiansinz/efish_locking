@@ -1,7 +1,7 @@
 import os
 import re
 from itertools import count
-
+from . import colordict
 import datajoint as dj
 import datajoint as dj
 import sys
@@ -826,7 +826,7 @@ class ISIHistograms(dj.Imported):
             return
         dt = eod_cycles[1] - eod_cycles[0]
         idx = eod_cycles <= 15
-        ax.bar(eod_cycles[idx], p[idx], width=dt, color=sns.xkcd_rgb['grey'], lw=0, zorder=-10)
+        ax.bar(eod_cycles[idx], p[idx], width=dt, color='gray', lw=0, zorder=-10, label='ISI histogram')
         ax.set_xlabel('EOD cycles')
 
 
@@ -902,7 +902,7 @@ class Baseline(dj.Imported):
         # ax.set_ylabel('PSTH')
         ax.set_yticks([])
 
-    def plot_raster(self, ax, cycles=21, repeats=15):
+    def plot_raster(self, ax, cycles=21, repeats=20):
         sampl_rate, duration, eod = self.fetch1['samplingrate', 'duration', 'eod']
         peaks, spikes = (self * self.SpikeTimes() * self.LocalEODPeaksTroughs()).fetch1['peaks', 'times']
         spikes = spikes / 1000  # convert to s
@@ -915,16 +915,22 @@ class Baseline(dj.Imported):
 
         # histogram
         db = 1 / eod
+
+
         bins = np.arange(-(cycles // 2) / eod, (cycles // 2) / eod + db, db)
         bin_centers = 0.5 * (bins[1:] + bins[:-1])
         h, _ = np.histogram(np.hstack(spikes), bins=bins)
+
         h = h.astype(np.float64)
+        f_max = h.max()/db/len(spikes)
+
         h *= repeats / h.max() / 2
-        ax.bar(bin_centers, h, align='center', width=db, color='lightgray', zorder=-20, lw=0, label='spike histogram')
-
-
+        ax.bar(bin_centers, h, align='center', width=db, color='lightgray', zorder=-20, lw=0, label='PSTH')
+        ax.plot(bin_centers[0] * np.ones(2), [repeats//8, h.max() * 150/f_max + repeats//8], '-', color='darkslategray',
+                lw=3, solid_capstyle='butt')
+        ax.text(bin_centers[0]+db/4, repeats/6, '150 Hz')
         for y, sp in zip(count(start=repeats//2+1), spikes[:min(repeats, len(spikes))]):
-            ax.vlines(sp, 0 * sp + y, 0 * sp + y+1,'k', rasterized=False)
+            ax.vlines(sp, 0 * sp + y, 0 * sp + y+1,'k', rasterized=False, label='spikes' if y == repeats//2 + 1 else None)
             # ax.plot(sp, 0 * sp + y, '.k', mfc='k', ms=2, zorder=-10, rasterized=False)
         y += 1
         ax.set_xticks(np.arange(-(cycles // 2) / eod, (cycles // 2 + 1) / eod, 5 / eod))
@@ -943,7 +949,8 @@ class Baseline(dj.Imported):
             e = self.clean_signal(e, eod, t[1] - t[0])
 
             e = (e - e.min()) / (e.max() - e.min()) * repeats/2
-            ax.plot(t, e + y, lw=2, color='steelblue', zorder=-15, label='EOD')
+
+            ax.plot(t, e + y, lw=2, color=colordict['eod'], zorder=-15, label='EOD')
 
     @staticmethod
     def clean_signal(s, eod, dt, tol=3):
@@ -1323,8 +1330,8 @@ class BaseRate(dj.Imported):
         idx = slice(*mi)
         dt = t[1] - t[0]
         t = t - t[mi[0]]
-        ax2.plot(t[idx], ampl[idx], color='black', label='EOD', zorder=10)
-        ax.bar(t[idx], rate[idx], color='grey', lw=0, width=dt, align='center', label='spike histogram', zorder=-10)
+        ax2.plot(t[idx], ampl[idx], color=colordict['eod'], label='EOD', zorder=10)
+        ax.bar(t[idx], rate[idx], color='lightgray', lw=0, width=dt, align='center', label='PSTH', zorder=-10)
         # ax.set_ylabel('firing rate [Hz]')
         ax2.set_ylabel('EOD amplitude [mV]')
         ax.axis('tight')

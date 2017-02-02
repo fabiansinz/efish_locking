@@ -1,7 +1,7 @@
 import functools
 import itertools
 from collections import OrderedDict
-
+from . import colordict
 import numpy as np
 import pandas as pd
 import pymysql
@@ -140,8 +140,6 @@ def find_significant_peaks(spikes, w, spectrum, peak_dict, threshold, tol=3.,
 
 
 class PlotableSpectrum:
-    # colors = [sns.xkcd_rgb[c] for c in ["windows blue", "amber", "greyish", "faded green", "dusty purple"]]
-    colors = ["#ff474c", "steelblue", "#e74c3c", "#9a0eea", "gray"]
 
     def plot(self, ax, restrictions, f_max=2000, ncol=None):
         sns.set_context('paper')
@@ -156,7 +154,7 @@ class PlotableSpectrum:
             if isinstance(self, FirstOrderSpikeSpectra):
                 peaks = (FirstOrderSignificantPeaks() * restrictions & fos)
             elif isinstance(self, SecondOrderSpikeSpectra):
-                peaks = (SecondOrderSignificantPeaks() & restrictions & fos)
+                peaks = (SecondOrderSignificantPeaks() * restrictions & fos)
             else:
                 raise Exception("Mother class unknown!")
 
@@ -184,6 +182,8 @@ class PlotableSpectrum:
             df = pd.DataFrame(peaks.fetch())
             df['on'] = np.abs(df.ix[:, :3]).sum(axis=1)
             df = df[df.frequency > 0]
+
+
             for freq, freq_group in df.groupby('frequency'):  # get all combinations that have the same frequency
 
                 freq_group = freq_group[
@@ -212,19 +212,19 @@ class PlotableSpectrum:
 
                     # use different colors and labels depending on the frequency
                     if cs != 0 and ce == 0 and cb == 0:
-                        ax.plot(freq, vs, 'k', mfc=self.colors[0], label='stimulus', marker=markers[0],
+                        ax.plot(freq, vs, 'k', mfc=colordict['stimulus'], label='stimulus', marker=markers[0],
                                 linestyle='None')
                     elif cs == 0 and ce != 0 and cb == 0:
-                        ax.plot(freq, vs, 'k', mfc=self.colors[1], label='EODf', marker=markers[1], linestyle='None')
+                        ax.plot(freq, vs, 'k', mfc=colordict['eod'], label='EODf', marker=markers[1], linestyle='None')
                     elif cs == 0 and ce == 0 and cb != 0:
-                        ax.plot(freq, vs, 'k', mfc=self.colors[2], label='baseline firing', marker=markers[2],
+                        ax.plot(freq, vs, 'k', mfc=colordict['baseline'], label='baseline firing', marker=markers[2],
                                 linestyle='None')
                     elif cs == 1 and ce == -1 and cb == 0:
-                        ax.plot(freq, vs, 'k', mfc=self.colors[3], label=r'$\Delta f$=%.0f Hz' % freq,
+                        ax.plot(freq, vs, 'k', mfc=colordict['delta_f'], label=r'$\Delta f$=%.0f Hz' % freq,
                                 marker=markers[3],
                                 linestyle='None')
                     else:
-                        ax.plot(freq, vs, 'k', mfc=self.colors[4], label='combinations', marker=markers[4],
+                        ax.plot(freq, vs, 'k', mfc=colordict['combinations'], label='combinations', marker=markers[4],
                                 linestyle='None')
                     term = term.replace('1.0 ', ' ')
                     term = term.replace('.0 ', ' ')
@@ -233,6 +233,7 @@ class PlotableSpectrum:
                             ha='left',
                             va='bottom')
             handles, labels = ax.get_legend_handles_labels()
+
             by_label = OrderedDict(sorted(zip(labels, handles), key=label_order))
             ax.legend(by_label.values(), by_label.keys(), bbox_to_anchor=(1, 1.3),
                       ncol=len(by_label) if ncol is None else ncol)
@@ -853,7 +854,7 @@ class EODStimulusPSTSpikes(dj.Computed):
             ax.set_yticks(0.5 * (y[1:] + y[:-1]))
             ax.set_yticklabels(['%.0f' % yt for yt in yticks])
 
-    def plot_single(self, ax, restrictions, coincidence=0.0001, repeats = 500):
+    def plot_single(self, ax, restrictions, coincidence=0.0001, repeats=20):
 
         rel = self * CoincidenceTolerance() * Runs().proj('delta_f', 'contrast') & restrictions & dict(tol=coincidence)
         df = pd.DataFrame(rel.fetch())
@@ -864,21 +865,28 @@ class EODStimulusPSTSpikes(dj.Computed):
             db = 1 / eod
             bins = np.arange(-whs, whs + db, db)
             bin_centers = 0.5 * (bins[1:] + bins[:-1])
-            yticks = []
-            if len(df) > repeats:
-                df = df[:repeats]
-            # repeats = len(df)
 
             # --- histogram
             h, _ = np.histogram(np.hstack(df.spikes), bins=bins)
+            f_max = h.max() / db / len(df.spikes)
+
             h = h.astype(np.float64)
             h *= repeats / h.max() / 2
             ax.bar(bin_centers, h, align='center', width=db, color='lightgray', zorder=-20, lw=0, label='PSTH')
+            ax.plot(bin_centers[0] * np.ones(2), [repeats // 8, h.max() * 450 / f_max + repeats // 8], '-',
+                    color='darkslategray',
+                    lw=3, solid_capstyle='butt')
+            ax.text(bin_centers[0] + db / 4, repeats / 5, '450 Hz')
 
             # y = np.asarray(y)
+            if len(df) > repeats:
+                df = df[:repeats]
 
             for offset, sp in zip(itertools.count(start=repeats // 2 + 1), df.spikes):
-                ax.plot(sp, 0 * sp + offset, '.k', mfc='k', ms=2, zorder=-10, rasterized=False)
+                # ax.plot(sp, 0 * sp + offset, '.k', mfc='k', ms=2, zorder=-10, rasterized=False,
+                #         label='spikes' if offset == repeats // 2 + 1 else None)
+                ax.vlines(sp, 0 * sp + offset, 0 * sp + offset + 1,'k',   zorder=-10, rasterized=False,
+                        label='spikes' if offset == repeats // 2 + 1 else None)
                 offset += 1
             norm = lambda x: (x - x.min()) / (x.max() - x.min())
 
@@ -887,9 +895,10 @@ class EODStimulusPSTSpikes(dj.Computed):
             high, hidx, low, lidx = peakdet(avg_efield, delta=0.01)
             fh = InterpolatedUnivariateSpline(t[hidx], high, k=3)
             fl = InterpolatedUnivariateSpline(t[lidx], low, k=3)
-            ax.plot(t, avg_efield + offset, lw=2, color='steelblue', zorder=-15, label='stimulus + EOD')
-            ax.plot(t, fh(t) + offset, lw=2, color='deeppink', zorder=-15, label='AM')
-            ax.plot(t, fl(t) + offset, lw=2, color='deeppink', zorder=-15)
+            ax.plot(t, avg_efield + offset, lw=2, color=colordict['stimulus'], zorder=-15,
+                    label='stimulus + EOD')
+            ax.plot(t, fh(t) + offset, lw=2, color=colordict['delta_f'], zorder=-15, label='AM')
+            ax.plot(t, fl(t) + offset, lw=2, color=colordict['delta_f'], zorder=-15)
 
             ax.set_xlim((-whs, whs))
             ax.set_xticks([-whs, -whs / 2, 0, whs / 2, whs])
