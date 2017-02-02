@@ -1330,7 +1330,7 @@ class BaseRate(dj.Imported):
         idx = slice(*mi)
         dt = t[1] - t[0]
         t = t - t[mi[0]]
-        ax2.plot(t[idx], ampl[idx], color=colordict['eod'], label='EOD', zorder=10)
+        ax2.plot(t[idx], ampl[idx], color=colordict['eod'], label='EOD', zorder=10, lw=2)
         ax.bar(t[idx], rate[idx], color='lightgray', lw=0, width=dt, align='center', label='PSTH', zorder=-10)
         # ax.set_ylabel('firing rate [Hz]')
         ax2.set_ylabel('EOD amplitude [mV]')
