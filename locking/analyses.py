@@ -153,7 +153,10 @@ class PlotableSpectrum:
             if isinstance(self, FirstOrderSpikeSpectra):
                 peaks = (FirstOrderSignificantPeaks() * restrictions & fos)
             elif isinstance(self, SecondOrderSpikeSpectra):
-                peaks = (SecondOrderSignificantPeaks() * restrictions & fos)
+                if isinstance(restrictions, dict):
+                    peaks = (SecondOrderSignificantPeaks() & restrictions & fos)
+                else:
+                    peaks = (SecondOrderSignificantPeaks() * restrictions & fos)
             else:
                 raise Exception("Mother class unknown!")
 

@@ -56,12 +56,12 @@ class SimulationFigure:
             a.tick_params('both', length=3, width=1, which='both')
 
         fig.tight_layout()
-        fig.subplots_adjust(right=0.80)
+        fig.subplots_adjust(left=0.1, right=0.95)
 
         if ax['real_spike_spectrum'].legend_ is not None:
-            ax['real_spike_spectrum'].legend_.set_bbox_to_anchor((1.25, 1.),
+            ax['real_spike_spectrum'].legend_.set_bbox_to_anchor((1., 1.),
                                                              transform=ax['real_spike_spectrum'].transAxes)
-        ax['stimulus_spectrum'].legend_.set_bbox_to_anchor((1.2, 1))
+        # ax['stimulus_spectrum'].legend_.set_bbox_to_anchor((1.2, 1))
         # sns.despine(ax=self.ax['real_isi'], left=True, trim=True)
         # sns.despine(ax=self.ax['sim_isi'], left=True, trim=True)
 
@@ -110,6 +110,6 @@ for ri, hs in itertools.product([5,13],[0,1]):
             PUnitSimulations().plot_spike_spectrum(key, ax['sim_spike_spectrum'])
 
             restrictions = dict(key, refined=True)
-            SecondOrderSpikeSpectra().plot(ax['real_spike_spectrum'], restrictions, f_max=2000, ncol=1)
+            SecondOrderSpikeSpectra().plot(ax['real_spike_spectrum'], restrictions, f_max=2000, ncol=4)
             # ISIHistograms().plot(ax['real_isi'], restrictions)
             # PUnitSimulations().plot_isi(key, ax['sim_isi'])
