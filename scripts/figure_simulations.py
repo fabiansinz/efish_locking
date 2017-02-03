@@ -5,7 +5,7 @@ from locking import mkdir
 from locking.analyses import SecondOrderSpikeSpectra
 from locking.data import *
 from locking.modelling import *
-from scripts.plot_settings import params as plot_params
+from scripts.config import params as plot_params
 
 
 class SimulationFigure:

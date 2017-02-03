@@ -4,7 +4,7 @@ from locking import mkdir
 from locking import data
 from locking import analyses as ana
 from locking.data import ISIHistograms, FICurves
-from scripts.plot_settings import params as plot_params, FormatedFigure
+from scripts.config import params as plot_params, FormatedFigure
 import matplotlib.pyplot as plt
 # plt.switch_backend('Agg')
 from locking.analyses import *

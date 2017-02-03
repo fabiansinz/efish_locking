@@ -1,17 +1,17 @@
 from scipy.interpolate import interp1d
 
-from locking import analyses as ana
+from locking import analyses as ana, colordict
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
 import numpy as np
 from locking import mkdir
-from locking.analyses import PlotableSpectrum
-from scripts.plot_settings import params as plot_params, FormatedFigure
+from scripts.config import params as plot_params, FormatedFigure
 from scipy import stats
 from scipy import interp
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 import datajoint as dj
+
 
 class FigureBeatStim(FormatedFigure):
     def prepare(self):
@@ -22,10 +22,9 @@ class FigureBeatStim(FormatedFigure):
             self.ax = {}
             self.fig = plt.figure(figsize=(7, 2.2), dpi=400)
 
-
-            self.ax['difference'] = self.fig.add_subplot(1,3,3)
-            self.ax['scatter'] = self.fig.add_subplot(1,3,1)
-            self.ax['scatter2'] = self.fig.add_subplot(1,3,2)
+            self.ax['difference'] = self.fig.add_subplot(1, 3, 3)
+            self.ax['scatter'] = self.fig.add_subplot(1, 3, 1)
+            self.ax['scatter2'] = self.fig.add_subplot(1, 3, 2)
 
     @staticmethod
     def format_difference(ax):
@@ -35,8 +34,8 @@ class FigureBeatStim(FormatedFigure):
         ax.set_xlim((-.6, .6))
         ax.set_xticks(np.arange(-.5, 1, .5))
         ax.tick_params('both', length=3, width=1, which='both')
-        ax.set_ylim((-.8,1.1))
-        ax.set_yticks(np.arange(-.5,1, .5))
+        ax.set_ylim((-.8, 0.5))
+        ax.set_yticks(np.arange(-.75, .75, .25))
         ax.text(-0.4, 1, 'C', transform=ax.transAxes, fontweight='bold')
 
     @staticmethod
@@ -49,30 +48,29 @@ class FigureBeatStim(FormatedFigure):
 
     @staticmethod
     def format_scatter(ax):
-        ax.set_xlabel('vector strength stimulus')
-        ax.set_ylabel('vector strength beat')
+        ax.set_ylabel('vector strength stimulus')
+        ax.set_xlabel('vector strength beat')
 
         ax.set_xlim((0, 1.1))
         ax.set_ylim((0, 1.1))
-        ax.set_xticks([0,.5,1])
-        ax.set_yticks([0,.5,1])
+        ax.set_xticks([0, .5, 1])
+        ax.set_yticks([0, .5, 1])
 
         ax.tick_params('both', length=3, width=1, which='both')
         ax.text(-0.3, 1, 'A', transform=ax.transAxes, fontweight='bold')
 
     @staticmethod
     def format_scatter2(ax):
-        ax.set_xlabel('vector strength stimulus')
-        ax.set_ylabel('vector strength beat')
+        ax.set_ylabel('vector strength stimulus')
+        ax.set_xlabel('vector strength beat')
 
         ax.set_xlim((0, 1.1))
         ax.set_ylim((0, 1.1))
-        ax.set_xticks([0,.5,1])
-        ax.set_yticks([0,.5,1])
+        ax.set_xticks([0, .5, 1])
+        ax.set_yticks([0, .5, 1])
 
         ax.tick_params('both', length=3, width=1, which='both')
         ax.text(-0.3, 1, 'B', transform=ax.transAxes, fontweight='bold')
-
 
     def format_figure(self):
         sns.despine(self.fig, offset=1, trim=True)
@@ -86,20 +84,20 @@ def plot_locking(df, ax, legend=False):
     idx = (df.vs_beat >= df.crit_beat) & (df.vs_stimulus < df.crit_stimulus)
     n.append(idx.sum())
     df2 = df[idx].groupby(['cell_id', 'delta_f']).mean().reset_index()
-    ax.scatter(df2.vs_stimulus, df2.vs_beat,  color=PlotableSpectrum.colors[3],
-                          edgecolors='w', lw=.1, s=s, label='beat only')
+    ax.scatter(df2.vs_beat, df2.vs_stimulus, color=colordict['delta_f'],
+               edgecolors='w', lw=.1, s=s, label=r'$\Delta f$ only')
 
     idx = (df.vs_beat < df.crit_beat) & (df.vs_stimulus >= df.crit_stimulus)
     n.append(idx.sum())
     df2 = df[idx].groupby(['cell_id', 'delta_f']).mean().reset_index()
-    ax.scatter(df2.vs_stimulus, df2.vs_beat, color=PlotableSpectrum.colors[0],
-                          edgecolors='w', lw=.1, s=s, label='stimulus only')
+    ax.scatter(df2.vs_beat, df2.vs_stimulus, color=colordict['stimulus'],
+               edgecolors='w', lw=.1, s=s, label='stimulus only')
 
     idx = (df.vs_beat >= df.crit_beat) & (df.vs_stimulus >= df.crit_stimulus)
     n.append(idx.sum())
     df2 = df[idx].groupby(['cell_id', 'delta_f']).mean().reset_index()
-    ax.scatter(df2.vs_stimulus, df2.vs_beat, color=sns.xkcd_rgb['teal blue'],
-                          edgecolors='w', lw=.1, s=s, label='both')
+    ax.scatter(df2.vs_beat, df2.vs_stimulus, color=sns.xkcd_rgb['teal blue'],
+               edgecolors='w', lw=.1, s=s, label='both')
 
     ax.set_aspect(1.)
 
@@ -107,13 +105,14 @@ def plot_locking(df, ax, legend=False):
                        width="20%",  # width = 30% of parent_bbox
                        height="20%",  # height : 1 inch
                        loc=4)
-    axins.bar(0,n[0], color=PlotableSpectrum.colors[3], align='center')
-    axins.bar(1,n[1], color=PlotableSpectrum.colors[0], align='center')
-    axins.bar(2,n[2], color=sns.xkcd_rgb['teal blue'], align='center')
+    axins.bar(0, n[0], color=colordict['delta_f'], align='center')
+    axins.bar(1, n[1], color=colordict['stimulus'], align='center')
+    axins.bar(2, n[2], color=sns.xkcd_rgb['teal blue'], align='center')
     axins.axis('off')
     ax.plot(*2 * (np.linspace(0, 1, 2),), '--k', zorder=-10)
     if legend:
-        ax.legend(ncol=2,prop={'size':6}, bbox_to_anchor=(.95,1.1))
+        ax.legend(ncol=2, prop={'size': 6}, bbox_to_anchor=(.95, 1.1))
+
 
 # ------------------------------------------------------------------------------------------------------
 # get all trials with contrast 20%, significant locking to beat or stimulus and |df|>30 to avoid confusion of stimulus
@@ -125,8 +124,8 @@ df = pd.DataFrame(dat.fetch())
 df[r'$\nu$(stimulus) - $\nu$(AM)'] = df.vs_stimulus - df.vs_beat
 df['beat/EODf'] = df.beat / df.eod
 
-t = np.linspace(-.6,.6, 50)
-with FigureBeatStim(filename='figures/figure_locking_beat_vs_stimulus.pdf') as (fig, ax):
+t = np.linspace(-.6, .6, 50)
+with FigureBeatStim(filename='figures/figure_locking_beat_vs_stimulus.png') as (fig, ax):
     interps = []
     for cell, df_cell in df.groupby('cell_id'):
         dfm = df_cell.groupby(['delta_f']).mean()
@@ -137,7 +136,7 @@ with FigureBeatStim(filename='figures/figure_locking_beat_vs_stimulus.pdf') as (
             ax['difference'].plot(dfm['beat/EODf'], dfm[r'$\nu$(stimulus) - $\nu$(AM)'], '-', lw=1, label=cell,
                                   color='lightgrey')
     ax['difference'].plot(t, np.nanmean(interps, axis=0), '-k', lw=1)
-    ax['difference'].plot(t, 0*t, '--',color='k', lw=1)
+    ax['difference'].plot(t, 0 * t, '--', color='k', lw=1)
 
     plot_locking(df, ax['scatter'], legend=True)
     plot_locking(df[np.abs(df.delta_f) > 200], ax['scatter2'], legend=True)

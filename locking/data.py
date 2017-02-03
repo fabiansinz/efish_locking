@@ -1318,16 +1318,19 @@ class BaseRate(dj.Imported):
         _, key['max_idx'], _, key['min_idx'] = peakdet(data[:, 2])
         self.insert1(key)
 
-    def plot(self, ax, ax2):
+    def plot(self, ax, ax2, find_range=True):
         t, rate, ampl, mi, ma = self.fetch1['time', 'eod_rate', 'eod_ampl', 'min_idx', 'max_idx']
         n = len(t)
-        if len(mi) < 2:
-            if mi[0] < n // 2:
-                mi = np.hstack((mi, [n]))
-            else:
-                mi = np.hstack(([0], mi + 1))
+        if find_range:
+            if len(mi) < 2:
+                if mi[0] < n // 2:
+                    mi = np.hstack((mi, [n]))
+                else:
+                    mi = np.hstack(([0], mi + 1))
 
-        idx = slice(*mi)
+            idx = slice(*mi)
+        else:
+            idx = slice(None)
         dt = t[1] - t[0]
         t = t - t[mi[0]]
         ax2.plot(t[idx], ampl[idx], color=colordict['eod'], label='EOD', zorder=10, lw=2)
