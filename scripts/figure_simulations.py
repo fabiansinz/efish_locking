@@ -104,7 +104,7 @@ for ri, hs in itertools.product([5,13],[0,1]):
         dir = 'figures/figure_simulation/' + key['id']
         mkdir(dir)
         df = (Runs() & key).fetch1['delta_f']
-        with SimulationFigure(filename='{dir}/figure04_{cell_id}_{df}_harmonics{harmonic_stimulation}.pdf'.format(dir=dir, df=df, **key)) as (fig, ax):
+        with SimulationFigure(filename='{dir}/{cell_id}_{df}_harmonics{harmonic_stimulation}.pdf'.format(dir=dir, df=df, **key)) as (fig, ax):
             PUnitSimulations().plot_stimulus_spectrum(key, ax['stimulus_spectrum'])
             PUnitSimulations().plot_membrane_potential_spectrum(key, ax['membrane_spectrum'])
             PUnitSimulations().plot_spike_spectrum(key, ax['sim_spike_spectrum'])

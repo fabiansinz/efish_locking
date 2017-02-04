@@ -538,14 +538,14 @@ class PUnitSimulations(dj.Computed):
 
 
         fonsize=ax.xaxis.get_ticklabels()[0].get_fontsize()
-        ax.text(eod, 1.1, r'EODf', rotation=40, horizontalalignment='left',
+        ax.text(eod, 1.1, r'EODf', rotation=0, horizontalalignment='center',
                 verticalalignment='bottom', fontsize=fonsize)
         ax.plot(eod, val_at(w[idx], S[idx], eod), marker=markerdict['eod'], color=colordict['eod'])
-        ax.text(eod * 2, 0.4, r'2 EODf', rotation=40, horizontalalignment='left',
+        ax.text(eod * 2, 0.35, r'2 EODf', rotation=0, horizontalalignment='center',
                 verticalalignment='bottom', fontsize=fonsize)
         ax.plot(eod * 2, val_at(w[idx], S[idx],2* eod), marker=markerdict['eod'], color=colordict['eod'])
 
-        ax.text(fstim, 0.3, r'$f_s$', rotation=40, horizontalalignment='left',
+        ax.text(fstim, 0.27, r'$f_s$', rotation=0, horizontalalignment='center',
                 verticalalignment='bottom', fontsize=fonsize)
         ax.plot(fstim, val_at(w[idx], S[idx],fstim), marker=markerdict['stimulus'], color=colordict['stimulus'])
         ax.set_ylim((0, 2))
@@ -569,13 +569,13 @@ class PUnitSimulations(dj.Computed):
         ax.fill_between(w[idx], 0 * w[idx], M[idx], color='darkslategray')
         ax.set_ylim((0, 1.5))
         fonsize = ax.xaxis.get_ticklabels()[0].get_fontsize()
-        ax.text(fstim - eod, 0.5, r'$\Delta f$', rotation=40, horizontalalignment='left',
+        ax.text(fstim - eod, 0.47, r'$\Delta f$', rotation=0, horizontalalignment='center',
                 verticalalignment='bottom', fontsize=fonsize)
 
         ax.plot(fstim - eod, val_at(w[idx], M[idx], np.abs(fstim - eod)),
                 marker=markerdict['delta_f'], color=colordict['delta_f'])
 
-        ax.text(eod + fstim, 0.1, r'EODf + $f_s$' % (eod + fstim), rotation=40, horizontalalignment='left',
+        ax.text(eod + fstim, 0.07, r'EODf + $f_s$' % (eod + fstim), rotation=0, horizontalalignment='center',
                 verticalalignment='bottom', fontsize=fonsize)
         ax.set_yticks([])
         ax.set_ylabel('amplitude spectrum of\nLIF input z(t)')
@@ -596,7 +596,7 @@ class PUnitSimulations(dj.Computed):
         ax.fill_between(w[idx], 0 * w[idx], vs[idx], color='darkslategray')
         ci = second_order_critical_vector_strength(stimulus_spikes)
         ax.fill_between(w[idx], 0 * w[idx], 0 * w[idx] + ci, color='silver', alpha=.5)
-        ax.text(eod3, 0.25, r'EODf - $\Delta f$' % eod3, rotation=40, horizontalalignment='left',
+        ax.text(eod3, 0.27, r'EODf - $\Delta f$' % eod3, rotation=0, horizontalalignment='center',
                 verticalalignment='bottom', fontsize=fonsize)
         ax.plot(eod3, val_at(w[idx], vs[idx], eod3),
                 marker=markerdict['combinations'], color=colordict['combinations'])

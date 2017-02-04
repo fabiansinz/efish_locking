@@ -125,7 +125,7 @@ df[r'$\nu$(stimulus) - $\nu$(AM)'] = df.vs_stimulus - df.vs_beat
 df['beat/EODf'] = df.beat / df.eod
 
 t = np.linspace(-.6, .6, 50)
-with FigureBeatStim(filename='figures/figure_locking_beat_vs_stimulus.png') as (fig, ax):
+with FigureBeatStim(filename='figures/figure07beat-vs-stimulus.pdf') as (fig, ax):
     interps = []
     for cell, df_cell in df.groupby('cell_id'):
         dfm = df_cell.groupby(['delta_f']).mean()

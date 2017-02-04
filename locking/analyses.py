@@ -240,7 +240,7 @@ class PlotableSpectrum:
                     term = term.replace('\\Delta', '\\Delta f')
 
                     ax.text(freq - 20, vs + 0.05, r'${}$'.format(term),
-                            fontsize=fontsize, rotation=85, ha='left', va='bottom')
+                            fontsize=fontsize, rotation=90, ha='left', va='bottom')
             handles, labels = ax.get_legend_handles_labels()
 
             by_label = OrderedDict(sorted(zip(labels, handles), key=label_order))
@@ -848,7 +848,7 @@ class EODStimulusPSTSpikes(dj.Computed):
                 dy = 0.15 * (y[-1] - y[0])
                 e = (e - e.min()) / (e.max() - e.min()) * dy
                 ax.plot(t, e + y[-1], lw=2, color='steelblue', zorder=-15, label='EOD')
-                y.append(y[-1] + dy)
+                y.append(y[-1] + 1.2*dy)
 
             y = np.asarray(y)
             ax.set_xlim((-whs, whs))
