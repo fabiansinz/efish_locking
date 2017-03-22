@@ -1,4 +1,7 @@
 #!/usr/bin/env python
+from glob import glob
+from os.path import basename
+
 from setuptools import setup, find_packages
 from os import path, listdir
 
@@ -27,5 +30,6 @@ setup(
         'License :: OSI Approved :: Creative Commons Attribution-NonCommercial-ShareAlike 3.0 Unported License',
         'Topic :: Analysis :: Reproducibility',
     ],
-    scripts=['scripts/{0}'.format(file) for file in listdir('scripts/')]
+    scripts=['scripts/{0}'.format(basename(file)) for file in glob('scripts/*.py')]
+
 )

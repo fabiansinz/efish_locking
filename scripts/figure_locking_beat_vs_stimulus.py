@@ -111,7 +111,7 @@ def plot_locking(df, ax, legend=False):
     axins.axis('off')
     ax.plot(*2 * (np.linspace(0, 1, 2),), '--k', zorder=-10)
     if legend:
-        ax.legend(ncol=2, prop={'size': 6}, bbox_to_anchor=(.95, 1.1))
+        ax.legend(ncol=1, prop={'size': 6}, bbox_to_anchor=(.6, 1.1))
 
 
 # ------------------------------------------------------------------------------------------------------
