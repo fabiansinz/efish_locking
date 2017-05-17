@@ -121,7 +121,7 @@ class FigurePyramidals(FormatedFigure):
     @staticmethod
     def format_contrast(ax):
         ax.set_ylim((0, 1.0))
-        ax.set_xlabel('contrast')
+        ax.set_xlabel('contrast [%]')
 
         ax.set_ylabel('')
         ax.text(-0.1, 1, 'F', transform=ax.transAxes, fontweight='bold')
@@ -229,7 +229,7 @@ if __name__ == "__main__":
         for (c, ct), dat in df.groupby(['cell_id', 'cell type']):
             mu = dat.groupby('contrast').mean().reset_index()
             s = dat.groupby('contrast').std().reset_index()
-            sns.pointplot('contrast', 'vector_strength', data=dat, ax=ax['contrast'],
+            pp = sns.pointplot('contrast', 'vector_strength', data=dat, ax=ax['contrast'],
                           palette={'p-units': sns.xkcd_rgb['azure'],
                                    'pyramidal': sns.xkcd_rgb['dark fuchsia']},
                           order=[10, 20], hue='cell type', alpha=1, scale=.5)
