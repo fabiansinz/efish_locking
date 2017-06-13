@@ -30,7 +30,7 @@ class FigureBeatStim(FormatedFigure):
     def format_difference(ax):
         # ax.legend(bbox_to_anchor=(1.6, 1.05), bbox_transform=ax.transAxes, prop={'size': 6})
         ax.set_xlabel(r'$\Delta f/$EODf')
-        ax.set_ylabel(r'$\nu$(stimulus) - $\nu$(AM)')
+        ax.set_ylabel(r'$\nu$(stimulus) - $\nu$($\Delta f$)')
         ax.set_xlim((-.6, .6))
         ax.set_xticks(np.arange(-.5, 1, .5))
         ax.tick_params('both', length=3, width=1, which='both')
@@ -48,8 +48,8 @@ class FigureBeatStim(FormatedFigure):
 
     @staticmethod
     def format_scatter(ax):
-        ax.set_ylabel('vector strength stimulus')
-        ax.set_xlabel('vector strength beat')
+        ax.set_ylabel(r'$\nu$(stimulus)')
+        ax.set_xlabel(r'$\nu$($\Delta f$)')
 
         ax.set_xlim((0, 1.1))
         ax.set_ylim((0, 1.1))
@@ -61,8 +61,8 @@ class FigureBeatStim(FormatedFigure):
 
     @staticmethod
     def format_scatter2(ax):
-        ax.set_ylabel('vector strength stimulus')
-        ax.set_xlabel('vector strength beat')
+        ax.set_ylabel(r'$\nu$(stimulus)')
+        ax.set_xlabel(r'$\nu$($\Delta f$)')
 
         ax.set_xlim((0, 1.1))
         ax.set_ylim((0, 1.1))
@@ -110,6 +110,7 @@ def plot_locking(df, ax, legend=False):
     axins.bar(2, n[2], color=sns.xkcd_rgb['teal blue'], align='center')
     axins.axis('off')
     ax.plot(*2 * (np.linspace(0, 1, 2),), '--k', zorder=-10)
+    print(n)
     if legend:
         ax.legend(ncol=1, prop={'size': 6}, bbox_to_anchor=(.6, 1.1))
 
@@ -121,7 +122,7 @@ dat = ana.Decoding() * ana.Cells() * ana.Decoding.Beat() * ana.Decoding.Stimulus
       & dict(contrast=20, am=0) \
       & ['vs_stimulus >= crit_stimulus', 'vs_beat >= crit_beat'] & 'ABS(delta_f) > 30'
 df = pd.DataFrame(dat.fetch())
-df[r'$\nu$(stimulus) - $\nu$(AM)'] = df.vs_stimulus - df.vs_beat
+df[r'$\nu$(stimulus) - $\nu$($\Delta f$)'] = df.vs_stimulus - df.vs_beat
 df['beat/EODf'] = df.beat / df.eod
 
 t = np.linspace(-.6, .6, 50)
@@ -130,10 +131,10 @@ with FigureBeatStim(filename='figures/figure07beat-vs-stimulus.pdf') as (fig, ax
     for cell, df_cell in df.groupby('cell_id'):
         dfm = df_cell.groupby(['delta_f']).mean()
         if len(dfm) > 1:
-            f = interp1d(dfm['beat/EODf'], dfm[r'$\nu$(stimulus) - $\nu$(AM)'], fill_value=np.nan,
+            f = interp1d(dfm['beat/EODf'], dfm[r'$\nu$(stimulus) - $\nu$($\Delta f$)'], fill_value=np.nan,
                          bounds_error=False)
             interps.append(f(t))
-            ax['difference'].plot(dfm['beat/EODf'], dfm[r'$\nu$(stimulus) - $\nu$(AM)'], '-', lw=1, label=cell,
+            ax['difference'].plot(dfm['beat/EODf'], dfm[r'$\nu$(stimulus) - $\nu$($\Delta f$)'], '-', lw=1, label=cell,
                                   color='lightgrey')
     ax['difference'].plot(t, np.nanmean(interps, axis=0), '-k', lw=1)
     ax['difference'].plot(t, 0 * t, '--', color='k', lw=1)

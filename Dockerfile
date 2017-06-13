@@ -16,6 +16,8 @@ RUN pip install h5py
 
 WORKDIR /efish
 
+# downgrade to previous version
+RUN pip install datajoint==0.6.1
 
 RUN \
   pip install git+https://github.com/circstat/pycircstat.git && \

@@ -111,5 +111,3 @@ for ri, hs in itertools.product([5,13],[0,1]):
 
             restrictions = dict(key, refined=True)
             SecondOrderSpikeSpectra().plot(ax['real_spike_spectrum'], restrictions, f_max=2000, ncol=4)
-            # ISIHistograms().plot(ax['real_isi'], restrictions)
-            # PUnitSimulations().plot_isi(key, ax['sim_isi'])

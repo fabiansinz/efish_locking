@@ -416,7 +416,6 @@ class PUnitSimulations(dj.Computed):
         bl = baseline(t)
         foreign = foreign_eod(t)
         fac = (bl.max() - bl.min()) * 0.2 / (foreign.max() - foreign.min())
-        #stimulus = lambda tt: baseline(tt) + fac * np.sin(2 * np.pi * other_eod * tt)
         stimulus = lambda tt: baseline(tt) + fac * foreign_eod(tt)
         
         spikes_base, membran_base = LIFPUnit().simulate(key, trials, t, baseline)
@@ -536,6 +535,9 @@ class PUnitSimulations(dj.Computed):
         lp = 1. / np.sqrt(w2[idx] ** 2 * tau ** 2 + 1)
         ax.plot(w[idx], lp / lp.max(), '--', color='gray', label='low pass filter', lw=1, zorder=-10)
 
+        # tmp = lp * dho
+        # tmp /=tmp.max()
+        # ax.plot(w[idx], tmp, '-', color='gray', label=' filter product', lw=1, zorder=-10)
 
         fonsize=ax.xaxis.get_ticklabels()[0].get_fontsize()
         ax.text(eod, 1.1, r'EODf', rotation=0, horizontalalignment='center',
@@ -563,6 +565,14 @@ class PUnitSimulations(dj.Computed):
         membrane_potential = (PUnitSimulations.StimulusMembranePotential() & key).fetch1['potential']
         w = np.fft.fftfreq(len(membrane_potential), d=dt)
         idx = (w > 0) & (w < f_max)
+
+        # fig, ax = plt.subplots()
+        # stimulus_signal = (PUnitSimulations.Stimulus() & key).fetch1['signal']
+        # print(stimulus_signal.shape, membrane_potential.shape)
+        # ax.plot(w[idx],np.abs(np.fft.fft(membrane_potential))[idx], '--b')
+        # ax.plot(w[idx],np.abs(np.fft.fft(stimulus_signal))[idx], '-r')
+        # # ax.twinx().plot(stimulus_signal[5000:8000],'-r')
+        # plt.show()
 
         M = np.abs(np.fft.fft(membrane_potential))
         M /= M[idx].max()

@@ -54,7 +54,7 @@ class FigurePyramidals(FormatedFigure):
         ax.set_xlim((0, 1000))
         ax.tick_params('x', length=3, width=1)
         ax.spines['bottom'].set_linewidth(1)
-        ax.legend(loc='top left', ncol=2, bbox_transform=ax.transAxes)
+        ax.legend(loc='top left', ncol=3, bbox_transform=ax.transAxes)
         sns.despine(ax=ax, left=True, trim=True, offset=5)
         ax.set_yticks([])
         ax.set_xlabel('frequency [Hz]')
@@ -195,8 +195,8 @@ if __name__ == "__main__":
         ax['spectrum'].plot(eod_freq, y[:-1], '--', zorder=-1, lw=2, dashes=(3, 7), color=colordict['eod'], label='EOD')
         ax['spectrum'].plot(stim_freq, y[:-1], '-', zorder=-1, lw=2, dashes=(3, 7), color=colordict['stimulus'],
                             label='stimulus')
-        # ax['spectrum'].plot(np.abs(deltaf_freq), y[:-1], '-', zorder=-1, lw=1, color=line_colors[2],
-        #                     label=r'$|\Delta f|$')
+        ax['spectrum'].plot(np.abs(deltaf_freq), y[:-1], '-', zorder=-1, lw=2, dashes=(3, 7), color=colordict['delta_f'],
+                            label=r'$|\Delta f|$')
 
         #====================================================================================
         rel_pu = data.Runs() * alys.FirstOrderSignificantPeaks() * alys.StimulusSpikeJitter() * data.Cells() \

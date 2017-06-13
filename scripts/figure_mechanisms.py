@@ -42,7 +42,7 @@ class FigureMechanisms(FormatedFigure):
         ax.set_xlim((0, 1500))
         ax.set_xticks(np.linspace(0, 1500, 7))
         ax.legend(bbox_to_anchor=(1.05, 1), bbox_transform=ax.transAxes, ncol=3)
-        sns.despine(ax=ax, left=True, trim=True)
+        sns.despine(ax=ax, left=True, trim=True, offset=0)
         ax.set_yticks([])
         ax.set_ylim((-.5, 9.5))
         ax.set_xlabel('frequency [Hz]')
@@ -62,26 +62,26 @@ class FigureMechanisms(FormatedFigure):
 
         plt.setp(leg.get_title(), fontsize=leg.get_texts()[0].get_fontsize())
         ax.text(-0.15, 1.01, 'B', transform=ax.transAxes, fontsize=10, fontweight='bold', va='top', ha='right')
-        sns.despine(ax=ax, trim=True)
+        sns.despine(ax=ax, trim=True, offset=0)
 
     @staticmethod
     def format_cartoon_psth(ax):
-        sns.despine(ax=ax, left=True, trim=True)
+        sns.despine(ax=ax, left=True, trim=True, offset=0)
         ax.set_yticks([])
         ax.legend(ncol=2, bbox_to_anchor=(1, 1.35))
         ax.text(-0.01, 1.1, 'C', transform=ax.transAxes, fontweight='bold')
 
     @staticmethod
     def format_cartoon_psth_stim(ax):
-        sns.despine(ax=ax, left=True, trim=True)
+        sns.despine(ax=ax, left=True, trim=True, offset=0)
         ax.set_yticks([])
-        ax.legend(ncol=3, bbox_to_anchor=(1,1.35))
+        ax.legend(ncol=3, bbox_to_anchor=(1,1.35), loc=1)
         ax.text(-0.01, 1.1, 'D', transform=ax.transAxes, fontweight='bold')
 
     @staticmethod
     def format_spectrum_base(ax):
         # --- spectrum
-        sns.despine(ax=ax, left=True, trim=True)
+        sns.despine(ax=ax, left=True, trim=True, offset=0)
         ax.set_title('vector strength spectrum' , fontsize=ax.xaxis.get_ticklabels()[0].get_fontsize())
         ax.set_yticks([])
         ax.set_xlabel('')
@@ -197,7 +197,11 @@ if __name__ == "__main__":
                     ax['cartoon_psth'].plot(t, base(t), '-', color=colordict['eod'], label='EOD')
                     ax['cartoon_psth'].set_ylim((0, 2.1))
 
+                    p = f_base(t_rad * rad2t)
+                    p /= p.sum()
+                    x,y = (p*np.cos(t_rad)).sum(), (p*np.sin(t_rad)).sum()
                     ax['polar_base'].fill_between(t_rad, 0 * t_rad, f_base(t_rad * rad2t), color='grey', lw=0)
+                    ax['polar_base'].plot(np.arctan2(y,x), np.sqrt(x**2 + y**2), 'ok', mfc='k', lw=0)
 
                     ax['cartoon_psth_stim'].fill_between(t, 0 * t, f_stim(t), color='grey', lw=0, label='PSTH')
                     ax['cartoon_psth_stim'].plot(t, stim_eod(t), '-', color=colordict['stimulus'])
@@ -207,6 +211,10 @@ if __name__ == "__main__":
                     ax['cartoon_psth_stim'].plot(t, base(t) * .5 + 4.1, '-', color=colordict['eod'], lw=1, label='EOD')
                     ax['cartoon_psth_stim'].set_ylim((0, 5.2))
 
+                    p = f_stim(t_rad * rad2t)
+                    p /= p.sum()
+                    x,y = (p*np.cos(t_rad)).sum(), (p*np.sin(t_rad)).sum()
+                    ax['polar_stim'].plot(np.arctan2(y,x), np.sqrt(x**2 + y**2), 'ok', mfc='k', lw=0)
                     ax['polar_stim'].fill_between(t_rad, 0 * t_rad, f_stim(t_rad * rad2t), color='grey', lw=0)
                     ax['polar_stim'].plot(t_rad[::5], stim(t_rad[::5] * rad2t), '.', ms=2.5, color=colordict['stimulus'])
 
@@ -219,17 +227,20 @@ if __name__ == "__main__":
 
                     F_base = fftshift(fft(f_base(t)))
                     w_base = fftshift(fftfreq(f_base(t).size, t[1] - t[0]))
+
                     idx = abs(w_base) < f_max
                     ax['spectrum_base'].plot(w_base[idx], abs(F_base[idx]), '-', color='gray')
 
                     F_stim = fftshift(fft(f_stim(t)))
                     w_stim = fftshift(fftfreq(f_stim(t).size, t[1] - t[0]))
                     idx = abs(w_stim) < f_max
+
                     ax['spectrum_stim'].plot(w_stim[idx], abs(F_stim[idx]), '-', color='gray')
 
                     for k in ['spectrum_base', 'spectrum_stim']:
                         ax[k].set_xticks(np.arange(-2 * eod, 3 * eod, eod))
                         ax[k].set_xlim((-f_max, f_max))
+                        ax[k].set_ylim((0, F_stim.max()*1.1))
                         ax[k].set_xticklabels([])
                         ax[k].set_xticklabels(np.arange(-2, 3))
-                        ax[k].set_xlabel('frequency [EOD]')
+                        ax[k].set_xlabel('frequency [EODf]')
