@@ -925,7 +925,7 @@ class SignificanceLevel(dj.Lookup):
     alpha       : float
     """
 
-    contents = [(0.05,)]
+    contents = [(0.001,)]
 
 
 @schema
@@ -986,51 +986,3 @@ class Decoding(dj.Computed):
                 c = np.NaN
             beat.insert1(dict(key, vs_beat=v, crit_beat=c))
 
-#
-# @schema
-# @gitlog
-# class DfClassification(dj.Computed):
-#     definition = """
-#     -> Runs
-#     other_run_id        : int   # id of the run with -df, cell_id and fish_id are the same
-#     ---
-#     eod_difference      : float # difference in the EODs between the two different runs
-#     """
-#
-#     @property
-#     def key_source(self):
-#         return ((Runs() * Runs().proj(r2='run_id', df2='delta_f', e2='eod', c2='contrast') \
-#                 & """ABS(contrast - c2) < 1E-6 and ABS(delta_f+df2) < 1E-6 and delta_f > 0
-#                         and am=0 and n_harmonics = 0 and contrast = 20 and delta_f >= 20""" \
-#                 & (Cells() & 'cell_type = "p-unit"')).proj(other_run_id='r2', eod_difference='e2 - eod') \
-#                 & 'abs(eod_difference) < 1').aggregate(Runs.SpikeTimes(), n='COUNT(trial_id)')
-#
-#     @staticmethod
-#     def compute_spectra(spikes, f_max=4000, df=0.1, downsample_to=5):
-#         h = signal.hamming(2*np.floor(downsample_to/0.1)+1)
-#         w = np.arange(-f_max, f_max+df, df)
-#         spectra = [[vector_strength_at(f, trial) for f in w] for trial in spikes]
-#         idx = np.where(w >= 0)[0]
-#         step = int(downsample_to / 0.1)
-#         spectra = np.vstack([np.convolve(s, h, mode='same')[idx[::step]] for s in spectra])
-#         return w[idx[::step]], spectra
-#
-#     def _make_tuples(self, key):
-#         np.random.seed(42)
-#         other_key = dict(key)
-#         other_key['run_id'] = other_key.pop('other_run_id')
-#         _, spikes = (Runs() & key).load_spikes()
-#         _, other_spikes = (Runs() & other_key).load_spikes()
-#         if len(spikes) < 30 or len(other_spikes) < 30:
-#
-#             print('Not enough trials', len(spikes)  , len(other_spikes))
-#             return
-#         w, spectra = DfClassification.compute_spectra(spikes, df=.1, downsample_to=5)
-#         _, other_spectra = DfClassification.compute_spectra(other_spikes, df=.1, downsample_to=5)
-#         #----------------------------------
-#         # TODO: Remove this later
-#         from IPython import embed
-#         embed()
-#         exit()
-#         #----------------------------------
-#
