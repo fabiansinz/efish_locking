@@ -202,6 +202,9 @@ class PaperCells(dj.Lookup):
                 {'cell_id': '2014-07-23-aa', 'locking_experiment': 1},
                 {'cell_id': '2014-12-11-am-invivo-1', 'locking_experiment': 1},
                 {'cell_id': '2014-12-11-aa-invivo-1', 'locking_experiment': 1},
+                {'cell_id': '2017-08-15-ag-invivo-1', 'locking_experiment': 1},
+                {'cell_id': '2017-08-15-ah-invivo-1', 'locking_experiment': 1},
+                {'cell_id': '2017-08-15-ai-invivo-1', 'locking_experiment': 1},
                 ]
 
 
