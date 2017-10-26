@@ -5,7 +5,7 @@ services:
     build: .
     volumes:
       - /tmp/.X11-unix:/tmp/.X11-unix
-      - $HOME/data/carolin:/data/
+      - /backup-kraken/efish_data/ephys/:/data/
       - .:/efish/
       - ./figures_docker:/efish/figures
     environment:
